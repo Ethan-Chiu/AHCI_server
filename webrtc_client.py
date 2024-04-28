@@ -4,55 +4,20 @@ import cv2
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, VideoStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.contrib.media import MediaPlayer
 from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling, object_from_string, object_to_string
 import websockets
-
-# class VideoStreamSender:
-#     def __init__(self, video_stream_track, websocket_uri):
-#         self.video_stream_track: VideoStreamTrack = video_stream_track
-#         self.websocket_uri = websocket_uri
-#         self.connection = None
-
-#     async def connect(self):
-#         self.connection = RTCPeerConnection()
-#         self.connection.on("icecandidate", self.on_ice_candidate)
-#         self.connection.on("negotiationneeded", self.on_negotiation_needed)
-
-#         # Add custom video stream track
-#         self.connection.addTrack(self.video_stream_track)
-
-#         # Create WebSocket connection
-#         self.websocket = await websockets.connect(self.websocket_uri)
-
-
-#     async def on_ice_candidate(self, candidate):
-#         # Send ICE candidate to remote peer
-#         await self.websocket.send(json.dumps({
-#             "Type": "CANDIDATE",
-#             "Message": {"type": "candidate", "candidate": candidate.to_dict()},
-#         }))
-
-#     async def on_negotiation_needed(self):
-#         # Create offer
-#         offer = await self.connection.createOffer()
-#         await self.connection.setLocalDescription(offer)
-#         # Send offer to remote peer
-#         await self.websocket.send(json.dumps({
-#             "Type": "OFFER",
-#             "Message":{"type": "offer", "sdp": self.connection.localDescription.sdp},
-#         }))
-
-
+from array_video_track import ArrayVideoStreamTrack
 
 
 async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
     def add_tracks():
-        if player and player.audio:
-            pc.addTrack(player.audio)
+        pc.addTrack(ArrayVideoStreamTrack())
 
-        if player and player.video:
-            pc.addTrack(player.video)
+        # if player and player.audio:
+        #     pc.addTrack(player.audio)
+
+        # if player and player.video:
+        #     pc.addTrack(player.video)
 
     # connect signaling
     websocket = await websockets.connect(websocket_uri)
