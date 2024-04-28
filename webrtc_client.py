@@ -10,8 +10,10 @@ from array_video_track import ArrayVideoStreamTrack
 
 
 async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
+
+    videoFrame = ArrayVideoStreamTrack()
     def add_tracks():
-        pc.addTrack(ArrayVideoStreamTrack())
+        pc.addTrack(videoFrame)
 
         # if player and player.audio:
         #     pc.addTrack(player.audio)
@@ -31,6 +33,8 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
             "Type": "OFFER",
             "Message": data,
         }))
+
+    # videoFrame.set_frame()
 
     # # consume signaling
     while True:
