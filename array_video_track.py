@@ -1,5 +1,3 @@
-import math
-import cv2
 import numpy
 from aiortc import (
     RTCIceCandidate,
@@ -10,7 +8,7 @@ from av import VideoFrame
 
 class ArrayVideoStreamTrack(VideoStreamTrack):
 
-    def __init__(self, queue):
+    def __init__(self):
         super().__init__()  # don't forget this!
         self.counter = 0
         height, width = 480, 640
@@ -27,6 +25,7 @@ class ArrayVideoStreamTrack(VideoStreamTrack):
 
     def _convertArrayToVideoFrame(self, array):
         return VideoFrame.from_ndarray(array, format="bgra")
+
     async def recv(self):
         pts, time_base = await self.next_timestamp()
 

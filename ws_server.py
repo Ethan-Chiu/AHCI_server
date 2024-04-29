@@ -14,10 +14,13 @@ class SimpleDataChannelServer:
         if path == "/video":
             print("Client connected ", websocket)
             self.clients.add(websocket)  # Add client to the set of connected clients
-
-            async for message in websocket:
-                await self.handle_message(websocket, message)
-            self.clients.remove(websocket)
+            try:
+                async for message in websocket:
+                    await self.handle_message(websocket, message)
+            except:
+                print("Client disconnected")
+            finally:
+                self.clients.remove(websocket)
         else:
             print(f"Received connection to unknown path: {path}")
             await websocket.close()
