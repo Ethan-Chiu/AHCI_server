@@ -1,15 +1,18 @@
 import asyncio
 import json
-import cv2
+import numpy
 import socket
-from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, VideoStreamTrack
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signaling, object_from_string, object_to_string
+from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer
+from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
 import websockets
 from array_video_track import ArrayVideoStreamTrack
+from typing import List
+import threading
 
 import os
 import sys
+import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -18,49 +21,35 @@ sys.path.append(grandparent_dir)
 from yolov9.segment.predict import run as predict
 import multiprocessing as mp
 import threading
-import numpy as np
 
 
-async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
-    videoFrame = ArrayVideoStreamTrack()
+async def run(pc: RTCPeerConnection, player, tracks: List[MediaStreamTrack], recorder, websocket_uri):
+
     def add_tracks():
-        pc.addTrack(videoFrame)
+        for track in tracks:
+            pc.addTrack(track)
 
         # if player and player.audio:
-        #     pc.addTrack(player.audio)
+        #    pc.addTrack(player.audio)
 
         # if player and player.video:
-        #     pc.addTrack(player.video)
+        #    pc.addTrack(player.video)
 
     # connect signaling
-
-    def generate_frame(queue, stop):
-        while not stop.is_set():
-            array = queue.get()
-            print(array)
-            videoFrame.set_frame(array)
-
     websocket = await websockets.connect(websocket_uri)
 
-    if role == "offer":
-        add_tracks()
-        await pc.setLocalDescription(await pc.createOffer())
+    # add tracks
+    add_tracks()
 
-        data = object_to_string(pc.localDescription)
-        await websocket.send(json.dumps({
-            "Type": "OFFER",
-            "Message": data,
-        }))
-
-    # videoFrame.set_frame()
-    queue = mp.Queue()
-    stop_event = mp.Event()
-    child1 = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
-    child1.start()
-    child2 = threading.Thread(target=generate_frame, kwargs={'queue': queue, 'stop': stop_event})
-    child2.start()    
+    # create offer
+    await pc.setLocalDescription(await pc.createOffer())
+    data = object_to_string(pc.localDescription)
+    await websocket.send(json.dumps({
+        "Type": "OFFER",
+        "Message": data,
+    }))
     
-    # # consume signaling
+    # consume signaling
     while True:
         message_str = await websocket.recv()
         print(message_str)
@@ -69,6 +58,7 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
         data = message["Message"]
 
         obj = object_from_string(data)
+        print("while")
 
         if type == "answer" and isinstance(obj, RTCSessionDescription):
             print("Get answer!")
@@ -82,10 +72,7 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
         elif obj is BYE:
             print("Exiting")
             stop_event.set()
-            child1.join()
-            child2.join()
             break
-
     
 
 if __name__ == "__main__":
@@ -99,6 +86,29 @@ if __name__ == "__main__":
     player = MediaPlayer("./test.mp4")
     recorder = MediaBlackhole()
 
+    videoFrame = ArrayVideoStreamTrack()
+
+    terminate = False
+
+    # Generate video data
+    data_bgr = numpy.zeros((240, 320, 4), numpy.uint8)
+
+    def generate_frame(queue):
+        while not terminate:
+            array = queue.get()
+            print("new!!!")
+            if type(array) == type(None):
+                break
+            videoFrame.set_frame(array)
+
+    queue = mp.Queue()
+    stop_event = mp.Event()
+    process_segment = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
+    process_segment.start()
+    thread_gen = threading.Thread(target=generate_frame, kwargs={'queue': queue})
+    thread_gen.start()    
+
+    time.sleep(20)
     # run event loop
     loop = asyncio.get_event_loop()
     try:
@@ -106,14 +116,18 @@ if __name__ == "__main__":
             run(
                 pc=pc,
                 player=player,
+                tracks=[videoFrame],
                 recorder=recorder,
                 websocket_uri=websocket_uri,
-                role="offer",
             )
         )
     except KeyboardInterrupt:
-        pass
+        print("Ctrl C exit")
     finally:
         # cleanup
+        terminate = True
+        queue.put(None)
+        thread_gen.join()
+        process_segment.terminate()
         loop.run_until_complete(recorder.stop())
         loop.run_until_complete(pc.close())
