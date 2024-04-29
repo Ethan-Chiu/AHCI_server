@@ -8,9 +8,20 @@ from aiortc.contrib.signaling import BYE, add_signaling_arguments, create_signal
 import websockets
 from array_video_track import ArrayVideoStreamTrack
 
+import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
+sys.path.append(grandparent_dir)
+
+from yolov9.segment.predict import run as predict
+import multiprocessing as mp
+import threading
+import numpy as np
+
 
 async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
-
     videoFrame = ArrayVideoStreamTrack()
     def add_tracks():
         pc.addTrack(videoFrame)
@@ -22,6 +33,13 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
         #     pc.addTrack(player.video)
 
     # connect signaling
+
+    def generate_frame(queue, stop):
+        while not stop.is_set():
+            array = queue.get()
+            print(array)
+            videoFrame.set_frame(array)
+
     websocket = await websockets.connect(websocket_uri)
 
     if role == "offer":
@@ -35,7 +53,13 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
         }))
 
     # videoFrame.set_frame()
-
+    queue = mp.Queue()
+    stop_event = mp.Event()
+    child1 = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
+    child1.start()
+    child2 = threading.Thread(target=generate_frame, kwargs={'queue': queue, 'stop': stop_event})
+    child2.start()    
+    
     # # consume signaling
     while True:
         message_str = await websocket.recv()
@@ -57,6 +81,9 @@ async def run(pc: RTCPeerConnection, player, recorder, websocket_uri, role):
 
         elif obj is BYE:
             print("Exiting")
+            stop_event.set()
+            child1.join()
+            child2.join()
             break
 
     
