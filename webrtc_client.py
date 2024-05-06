@@ -1,6 +1,6 @@
 import asyncio
 import json
-import numpy
+import numpy as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
@@ -18,9 +18,11 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(grandparent_dir)
 
-from yolov9.segment.predict import run as predict
 import multiprocessing as mp
 import threading
+
+# from yolov9.segment.predict import run as predict
+from yolo_runner import client_runner
 
 
 async def run(pc: RTCPeerConnection, player, tracks: List[MediaStreamTrack], recorder, websocket_uri):
@@ -91,11 +93,16 @@ if __name__ == "__main__":
     terminate = False
 
     # Generate video data
-    data_bgr = numpy.zeros((240, 320, 4), numpy.uint8)
+    data_bgr = np.zeros((240, 320, 4), np.uint8)
 
     def generate_frame(queue):
         while not terminate:
             array = queue.get()
+            alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
+            array = np.concatenate((array, alpha_channel), axis=2)
+            if type(array) == type(None):
+                break
+            videoFrame.set_frame(array)
             print("new!!!")
             if type(array) == type(None):
                 break
@@ -103,7 +110,8 @@ if __name__ == "__main__":
 
     queue = mp.Queue()
     stop_event = mp.Event()
-    process_segment = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
+    # process_segment = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
+    process_segment = mp.Process(target=client_runner, kwargs={'queue': queue})
     process_segment.start()
     thread_gen = threading.Thread(target=generate_frame, kwargs={'queue': queue})
     thread_gen.start()    
