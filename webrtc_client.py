@@ -1,6 +1,6 @@
 import asyncio
 import json
-import numpy as np
+import numpy as np as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
@@ -19,10 +19,12 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
 sys.path.append(grandparent_dir)
 
-from yolov9.segment.predict import run as predict
 import multiprocessing as mp
 import threading
 from record_hand import client_runner
+
+# from yolov9.segment.predict import run as predict
+from yolo_runner import client_runner
 
 
 async def run(pc: RTCPeerConnection, player, tracks: List[MediaStreamTrack], recorder, websocket_uri):
