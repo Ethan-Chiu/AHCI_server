@@ -1,12 +1,10 @@
 import asyncio
 import json
-import numpy as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
 from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
 import websockets
-from src.webrtc_utils.array_video_track import ArrayVideoStreamTrack
 from typing import List
 import threading
 
@@ -14,6 +12,8 @@ import os
 import sys
 import time
 import cv2
+
+from utils.frame_source import FrameSource
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -27,17 +27,11 @@ from record.record_hand import client_runner
 from yolo_runner import client_runner
 
 
-async def run(pc: RTCPeerConnection, player, tracks: List[MediaStreamTrack], recorder, websocket_uri):
+async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], recorder, websocket_uri):
 
     def add_tracks():
         for track in tracks:
             pc.addTrack(track)
-
-        # if player and player.audio:
-        #    pc.addTrack(player.audio)
-
-        # if player and player.video:
-        #    pc.addTrack(player.video)
 
     # connect signaling
     websocket = await websockets.connect(websocket_uri)
@@ -90,30 +84,15 @@ if __name__ == "__main__":
     player = MediaPlayer("./test.mp4")
     recorder = MediaBlackhole()
 
-    videoFrame = ArrayVideoStreamTrack()
-
     stop_event = mp.Event()
-
-    # Generate video data
-    data_bgr = np.zeros((240, 320, 4), np.uint8)
-
-    def generate_frame(queue):
-        print("generator started")
-        while not stop_event.is_set():
-            array = queue.get()
-            print("Get new frame")
-            alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
-            array = np.concatenate((array, alpha_channel), axis=2)
-            if type(array) == type(None):
-                break
-            videoFrame.set_frame(array)
 
     queue = mp.Queue()
 
+    videoSource = FrameSource(queue)
+
     process_segment = threading.Thread(target=client_runner, kwargs={'queue': queue, 'stop_event': stop_event})
     process_segment.start()
-    thread_gen = threading.Thread(target=generate_frame, kwargs={'queue': queue})
-    thread_gen.start()    
+
 
     # time.sleep(20)
     # run event loop
@@ -122,8 +101,7 @@ if __name__ == "__main__":
         loop.run_until_complete(
             run(
                 pc=pc,
-                player=player,
-                tracks=[videoFrame],
+                tracks=[videoSource.get_source_track()],
                 recorder=recorder,
                 websocket_uri=websocket_uri,
             )
@@ -132,11 +110,9 @@ if __name__ == "__main__":
         print("Ctrl C exit")
     finally:
         # cleanup
-        terminate = True
         stop_event.set()
         queue.put(None)
-        print("3")
-        thread_gen.join()
+        videoSource.stop()
         print("4")
         process_segment.join()
         print("5")
