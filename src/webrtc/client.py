@@ -14,6 +14,7 @@ import time
 import cv2
 
 from utils.frame_source import FrameSource
+from utils.yolo_runner_client import YoloRunnerClient
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -89,10 +90,10 @@ if __name__ == "__main__":
     queue = mp.Queue()
 
     videoSource = FrameSource(queue)
+    videoSource.listen()
 
-    process_segment = threading.Thread(target=client_runner, kwargs={'queue': queue, 'stop_event': stop_event})
-    process_segment.start()
-
+    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57", server_num=1)
+    yoloClient.connect()
 
     # time.sleep(20)
     # run event loop
@@ -113,8 +114,7 @@ if __name__ == "__main__":
         stop_event.set()
         queue.put(None)
         videoSource.stop()
-        print("4")
-        process_segment.join()
+        yoloClient.close()
         print("5")
         loop.run_until_complete(recorder.stop())
         print("6")
