@@ -24,8 +24,6 @@ import multiprocessing as mp
 import threading
 from record.record_hand import client_runner
 
-# from yolov9.segment.predict import run as predict
-from yolo_runner import client_runner
 
 
 async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], recorder, websocket_uri):

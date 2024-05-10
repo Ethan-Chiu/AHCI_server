@@ -48,25 +48,32 @@ class YoloRunnerClient:
         # stop distrubutor
         self.stop_event.set()
         self.worker.join()
+        print("YoloRunnerClient Distrubutor stopped")
 
         # stop sender
         for pipe in self.pipes:
             pipe[0].send(None)
-
         time.sleep(1)
 
         # stop displayer
         self.display_process.join()
+        print("YoloRunnerClient Displayer stopped")
+
         for pipe in self.pipes:
             if pipe[0].poll():
                 pipe[0].recv()
+
         for process in self.processes:
             process.join()
+            print("YoloRunnerClient Process stopped")
+
         print("YoloRunnerClient stopped")
 
 
     def _distribute(self):
+        print("Start connecting camera")
         cap = cv2.VideoCapture(0)
+        print("Camera connected")
         index = 0
         while not self.stop_event.is_set():
             ret, frame = cap.read()
@@ -84,13 +91,16 @@ class YoloRunnerClient:
     def _send_images(self, port, pipe):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((self.server_address, port))
+        print("Yolo client connected")
         try:
             while True:
                 image_bytes = pipe.recv()
+                print("received")
                 if image_bytes is None:
                     break
                 client_socket.sendall(image_bytes)
                 client_socket.send(b"IMAGE_COMPLETE")
+                print("sent")
 
                 result_bytes = b''
                 while True:
@@ -101,9 +111,11 @@ class YoloRunnerClient:
                     if result_bytes.endswith(b"ARRAY_COMPLETE"):
                         result_bytes = result_bytes[:-14]
                         break
+                print("received 2")
                 image = Image.open(io.BytesIO(result_bytes))
                 result = np.array(image)[:, :, :3]
                 pipe.send(result)
+                print("sent 2")
         finally:
             client_socket.close()
 
