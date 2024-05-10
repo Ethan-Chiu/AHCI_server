@@ -1,12 +1,12 @@
 import asyncio
 import json
-import numpy as np as np
+import numpy as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
 from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
 import websockets
-from array_video_track import ArrayVideoStreamTrack
+from src.webrtc_utils.array_video_track import ArrayVideoStreamTrack
 from typing import List
 import threading
 
@@ -21,7 +21,7 @@ sys.path.append(grandparent_dir)
 
 import multiprocessing as mp
 import threading
-from record_hand import client_runner
+from record.record_hand import client_runner
 
 # from yolov9.segment.predict import run as predict
 from yolo_runner import client_runner
@@ -92,16 +92,16 @@ if __name__ == "__main__":
 
     videoFrame = ArrayVideoStreamTrack()
 
-    terminate = False
+    stop_event = mp.Event()
 
     # Generate video data
     data_bgr = np.zeros((240, 320, 4), np.uint8)
 
     def generate_frame(queue):
         print("generator started")
-        while not terminate:
+        while not stop_event.is_set():
             array = queue.get()
-            print("new")
+            print("Get new frame")
             alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
             array = np.concatenate((array, alpha_channel), axis=2)
             if type(array) == type(None):
@@ -109,9 +109,7 @@ if __name__ == "__main__":
             videoFrame.set_frame(array)
 
     queue = mp.Queue()
-    stop_event = mp.Event()
 
-    # process_segment = mp.Process(target=predict, kwargs={'source': '0', 'queue': queue, 'stop': stop_event})
     process_segment = threading.Thread(target=client_runner, kwargs={'queue': queue, 'stop_event': stop_event})
     process_segment.start()
     thread_gen = threading.Thread(target=generate_frame, kwargs={'queue': queue})

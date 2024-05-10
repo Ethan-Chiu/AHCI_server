@@ -16,10 +16,6 @@ class ArrayVideoStreamTrack(VideoStreamTrack):
         # generate data here (an array with shape (height, width, 3))
         self.data_bgr = numpy.zeros((height, width, 4), numpy.uint8)
 
-        # shrink and center it
-        # M = numpy.float32([[0.5, 0, width / 4], [0, 0.5, height / 4]])
-        # data_bgr = cv2.warpAffine(data_bgr, M, (width, height))
-
     def set_frame(self, frame):
         self.data_bgr = frame
 

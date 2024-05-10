@@ -1,12 +1,7 @@
 import socket
-import numpy as np
 import cv2
-import sys
 from multiprocessing import Process, Pipe, Queue
 import time
-import io
-import os
-from PIL import Image
 import websockets
 import asyncio
 import threading
