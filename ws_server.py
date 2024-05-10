@@ -9,11 +9,12 @@ class SimpleDataChannelServer:
         self.port = port
         self.server = None
         self.clients = set()
+        self.pose_clients = set()
 
     async def handle_client(self, websocket, path):
         if path == "/video":
-            print("Client connected ", websocket)
-            self.clients.add(websocket)  # Add client to the set of connected clients
+            print("Video: Client connected ", websocket)
+            self.clients.add(websocket)
             try:
                 async for message in websocket:
                     await self.handle_message(websocket, message)
@@ -21,8 +22,18 @@ class SimpleDataChannelServer:
                 print("Client disconnected")
             finally:
                 self.clients.remove(websocket)
+        elif path == '/posedata':
+            print("PoseData: Client connected ", websocket)
+            self.pose_clients.add(websocket)
+            try:
+                async for posedata in websocket:
+                    await self.handle_pose_data(websocket, posedata)
+            except:
+                print('connection error')
+            finally:
+                self.pose_clients.remove(websocket)
         else:
-            print(f"Received connection to unknown path: {path}")
+            print(f"Received connection to unknown path: '{path}'")
             await websocket.close()
 
     async def handle_message(self, websocket: WebSocketServerProtocol, message):
@@ -34,6 +45,13 @@ class SimpleDataChannelServer:
             if client != websocket:  # Skip the sender
                 print(f"Sending message to {client}")
                 await client.send(message)
+
+    async def handle_pose_data(self, websocket: WebSocketServerProtocol, posedata):
+        for client in self.pose_clients:
+            if client != websocket:
+                print(f"Recieve data and send to {client}")
+                await client.send(posedata)
+
 
     async def start(self):
         self.server = await serve(self.handle_client, self.host, self.port)

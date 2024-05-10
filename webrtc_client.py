@@ -1,6 +1,6 @@
 import asyncio
 import json
-import numpy as np
+import numpy as np as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
@@ -13,6 +13,7 @@ import threading
 import os
 import sys
 import time
+import cv2
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -20,6 +21,7 @@ sys.path.append(grandparent_dir)
 
 import multiprocessing as mp
 import threading
+from record_hand import client_runner
 
 # from yolov9.segment.predict import run as predict
 from yolo_runner import client_runner
@@ -96,27 +98,26 @@ if __name__ == "__main__":
     data_bgr = np.zeros((240, 320, 4), np.uint8)
 
     def generate_frame(queue):
+        print("generator started")
         while not terminate:
             array = queue.get()
+            print("new")
             alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
             array = np.concatenate((array, alpha_channel), axis=2)
-            if type(array) == type(None):
-                break
-            videoFrame.set_frame(array)
-            print("new!!!")
             if type(array) == type(None):
                 break
             videoFrame.set_frame(array)
 
     queue = mp.Queue()
     stop_event = mp.Event()
-    # process_segment = mp.Process(target=predict, kwargs={'source': 'http://172.20.10.4/mjpeg/1', 'queue': queue, 'stop': stop_event})
-    process_segment = mp.Process(target=client_runner, kwargs={'queue': queue})
+
+    # process_segment = mp.Process(target=predict, kwargs={'source': '0', 'queue': queue, 'stop': stop_event})
+    process_segment = threading.Thread(target=client_runner, kwargs={'queue': queue, 'stop_event': stop_event})
     process_segment.start()
     thread_gen = threading.Thread(target=generate_frame, kwargs={'queue': queue})
     thread_gen.start()    
 
-    time.sleep(20)
+    # time.sleep(20)
     # run event loop
     loop = asyncio.get_event_loop()
     try:
@@ -134,8 +135,14 @@ if __name__ == "__main__":
     finally:
         # cleanup
         terminate = True
+        stop_event.set()
         queue.put(None)
+        print("3")
         thread_gen.join()
-        process_segment.terminate()
+        print("4")
+        process_segment.join()
+        print("5")
         loop.run_until_complete(recorder.stop())
+        print("6")
         loop.run_until_complete(pc.close())
+        print("7")
