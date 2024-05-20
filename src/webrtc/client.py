@@ -1,32 +1,23 @@
+import os
+import sys
 import asyncio
 import json
 import socket
+import threading
+import websockets
+import multiprocessing as mp
+from typing import List
+
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
 from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
-import websockets
-from typing import List
-import threading
-
-import os
-import sys
-import time
-import cv2
 
 from utils.frame_source import FrameSource
 from utils.yolo_runner_client import YoloRunnerClient
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-grandparent_dir = os.path.abspath(os.path.join(current_dir, '..'))
-sys.path.append(grandparent_dir)
-
-import multiprocessing as mp
-import threading
-from record.record_hand import client_runner
 
 
-
-async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], recorder, websocket_uri):
+async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket_uri):
 
     def add_tracks():
         for track in tracks:
@@ -60,7 +51,6 @@ async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], recorder, w
         if type == "answer" and isinstance(obj, RTCSessionDescription):
             print("Get answer!")
             await pc.setRemoteDescription(obj)
-            await recorder.start()
 
         elif type == "candidate" and isinstance(obj, RTCIceCandidate):
             print("Add candidate!")
@@ -79,29 +69,30 @@ if __name__ == "__main__":
     # peer connection
     pc = RTCPeerConnection()
 
-    # create media source
-    player = MediaPlayer("./test.mp4")
-    recorder = MediaBlackhole()
-
     stop_event = mp.Event()
 
+    # Queue for video
     queue = mp.Queue()
 
+    # Get video from queue
     videoSource = FrameSource(queue)
     videoSource.listen()
 
+    # Send camera to server
+    # Put result in queue
+    # TODO: send pose data to server
     yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57", server_num=1)
     yoloClient.connect()
+    yoloClient.display()
 
-    # time.sleep(20)
-    # run event loop
+
+    # Connect to Unity by WebRTC
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(
             run(
                 pc=pc,
                 tracks=[videoSource.get_source_track()],
-                recorder=recorder,
                 websocket_uri=websocket_uri,
             )
         )
@@ -113,8 +104,6 @@ if __name__ == "__main__":
         queue.put(None)
         videoSource.stop()
         yoloClient.close()
-        print("5")
-        loop.run_until_complete(recorder.stop())
-        print("6")
+        print("Closing peer connection")
         loop.run_until_complete(pc.close())
-        print("7")
+        print("Peer connection closed")

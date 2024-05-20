@@ -127,6 +127,7 @@ class YoloRunnerClient:
             if self.queue:
                 self.queue.put(result)
                 continue
+            # TODO: seperate display function
             cv2.imshow(f'Image {index}', result)
             index += 1
             if cv2.waitKey(int(1000/self.fps*0.9)) & 0xFF == ord('q'):

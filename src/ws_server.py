@@ -55,7 +55,7 @@ class SimpleDataChannelServer:
 
     async def start(self):
         self.server = await serve(self.handle_client, self.host, self.port)
-        print(f"Server started at ws://{self.host}:{self.port}/video")
+        print(f"Server started at ws://{self.host}:{self.port}")
 
     async def stop(self):
         if self.server:
