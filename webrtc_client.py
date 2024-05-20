@@ -1,6 +1,6 @@
 import asyncio
 import json
-import numpy as np as np
+import numpy as np
 import socket
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
@@ -21,10 +21,10 @@ sys.path.append(grandparent_dir)
 
 import multiprocessing as mp
 import threading
-from record_hand import client_runner
+# from record_hand import client_runner
 
 # from yolov9.segment.predict import run as predict
-from yolo_runner import client_runner
+from client import client_runner
 
 
 async def run(pc: RTCPeerConnection, player, tracks: List[MediaStreamTrack], recorder, websocket_uri):
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             print("new")
             alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
             array = np.concatenate((array, alpha_channel), axis=2)
-            if type(array) == type(None):
+            if array is None:
                 break
             videoFrame.set_frame(array)
 
@@ -134,7 +134,10 @@ if __name__ == "__main__":
         print("Ctrl C exit")
     finally:
         # cleanup
+        time.sleep(1)
+        print("1")
         terminate = True
+        print("2")
         stop_event.set()
         queue.put(None)
         print("3")
@@ -146,3 +149,4 @@ if __name__ == "__main__":
         print("6")
         loop.run_until_complete(pc.close())
         print("7")
+        exit()

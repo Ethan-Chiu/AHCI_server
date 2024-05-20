@@ -9,7 +9,23 @@ import os
 from PIL import Image
 import websockets
 import asyncio
+import threading
 
+async def ws_connect(stop_event, pipe):
+    print("connecting to ws posedata")
+    host = socket.gethostbyname(socket.gethostname())
+    websocket_uri = f"ws://{host}:8080/posedata"
+    websocket = await websockets.connect(websocket_uri)
+    print("connect to ws posedata")
+    while not stop_event.is_set():
+        message_str = await websocket.recv()
+        if pipe.poll():
+            pipe.recv()
+            pipe.send(message_str)
+    print("ws_connect ended")
+
+def ws_connect_sync(stop_event, pipe):
+    asyncio.run(ws_connect(stop_event, pipe))
 
 def send_images(server_address, port, pipe):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -24,6 +40,7 @@ def send_images(server_address, port, pipe):
             client_socket.sendall(image_bytes)
             client_socket.send(b"IMAGE_COMPLETE")
             print("sent")
+            print(b'handhead' in image_bytes)
 
             result_bytes = b''
             while True:
@@ -35,19 +52,20 @@ def send_images(server_address, port, pipe):
                     result_bytes = result_bytes[:-14]
                     break
             print("received 2")
-            image = Image.open(io.BytesIO(result_bytes))
-            result = np.array(image)[:, :, :3]
-            pipe.send(result)
-            print("sent 2")
+            if result_bytes:
+                image = Image.open(io.BytesIO(result_bytes))
+                result = np.array(image)[:, :, :3]
+                pipe.send(result)
+                print("sent 2")
     finally:
         client_socket.close()
 
 
-def displayer(pipes, main, fps, servers, queue):
+def displayer(pipes, main, fps, queue):
     print("displayer started")
     index = 0
     while True:
-        result = pipes[index % servers][0].recv()
+        result = pipes[0].recv()
         print("displaying")
         if queue:
             queue.put(result)
@@ -59,46 +77,36 @@ def displayer(pipes, main, fps, servers, queue):
             break
     cv2.destroyAllWindows()
 
-
-async def ws_connect(stop_event):
-    print("connecting to ws posedata")
-    host = socket.gethostbyname(socket.gethostname())
-    websocket_uri = f"ws://{host}:8080/posedata"
-    websocket = await websockets.connect(websocket_uri)
-    print("connect to ws posedata")
-    while not stop_event.is_set():
-        message_str = await websocket.recv()
-        #print(message_str)
-
-def ws_connect_sync(stop_event):
-    asyncio.run(ws_connect(stop_event))
-
 def client_runner(queue=None, stop_event=None):
-    print("start connecting camera")
-    cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
-    print("camera connected")
-    server_address = "140.112.30.57"
-    servers = 1
-    base_port = 13751
-    fps = 10
+    w = 640
+    h = 360
+    fps = 15
 
+    print("start connecting camera")
+    cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
+    print("camera connected")
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+    cap.set(cv2.CAP_PROP_FPS, fps)
+
+    server_address = "140.112.30.57"
+    base_port = 13752
+    
     # connect to ws
     # asyncio .run(ws_connect(stop_event))
-    asyncer = Process(target=ws_connect_sync, args=(stop_event,))
+    asyncpipe = Pipe()
+    asyncer = Process(target=ws_connect_sync, args=(stop_event, asyncpipe[1]))
     asyncer.start()
 
-    pipes = [Pipe() for _ in range(servers)]
+    pipes = Pipe()
     displipe = Pipe()
 
     processes = []
-    for i in range(servers):
-        port = base_port + i
-        process = Process(target=send_images, args=(server_address, port, pipes[i][1]))
-        processes.append(process)
-        process.start()
-
+    process = Process(target=send_images, args=(server_address, base_port, pipes[1]))
+    processes.append(process)
+    process.start()
     
-    display = Process(target=displayer, args=(pipes, displipe[1], fps, servers, queue))
+    display = Process(target=displayer, args=(pipes, displipe[1], fps, queue))
     display.start()
 
     print("iteration started")
@@ -107,14 +115,18 @@ def client_runner(queue=None, stop_event=None):
         ret, frame = cap.read()
         if not ret:
             break
+        asyncpipe[0].send(0)
         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
-        pipes[index % servers][0].send(image_bytes)
+        handhead = "handhead" + asyncpipe[0].recv()
+        return_bytes = image_bytes + bytes(handhead, 'utf-8')
+        pipes[0].send(return_bytes)
         if displipe[0].poll(1/fps):
             if displipe[0].recv() is None:
                 break
         index += 1
         if stop_event.is_set():
+            print("exxxxit")
             exit()
 
     for pipe in pipes:

@@ -47,11 +47,11 @@ def displayer(pipes, main, fps, servers, queue):
             break
     cv2.destroyAllWindows()
 
-def client_runner(queue=None):
-    cap = cv2.VideoCapture(0)
+def client_runner(queue=None, stop_event=None):
+    cap = cv2.VideoCapture(1)
     server_address = "140.112.30.57"
     servers = 1
-    base_port = 13761
+    base_port = 13751
     fps = 15
 
     pipes = [Pipe() for _ in range(servers)]
