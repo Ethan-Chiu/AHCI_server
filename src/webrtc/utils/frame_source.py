@@ -11,7 +11,7 @@ class FrameSource:
         self.stop_event = mp.Event()
 
     def _generate_frame(self):
-        print("generator started")
+        print("Generator started")
         while not self.stop_event.is_set():
             array = self.queue.get()
             if type(array) == type(None):

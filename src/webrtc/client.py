@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # Send camera to server
     # Put result in queue
     # TODO: send pose data to server
-    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57", server_num=1)
+    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57")
     yoloClient.connect()
     yoloClient.display()
 
