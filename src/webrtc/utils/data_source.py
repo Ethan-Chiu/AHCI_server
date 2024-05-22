@@ -17,7 +17,7 @@ class PoseDataSource:
         return self.connected
     
     async def get_data(self):
-        return await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+        return await self.websocket.recv()
     
     def end(self):
         self.websocket.close()
@@ -94,7 +94,7 @@ class Producer:
         except asyncio.exceptions.CancelledError:
             print("Producer cancelled")
         except Exception as err:
-            print(f"Unexpected {err=}, {type(err)=}")
+            print(f"Producer error: Unexpected {err=}, {type(err)=}")
         finally:
             self.pose_data_source.end()
             self.cam_data_source.end()
@@ -126,6 +126,10 @@ class Consumer:
                     await asyncio.sleep(1)
                     continue
 
+                if(cam_data is None or pose_data is None):
+                    print("Some data source is None, close")
+                    break
+
                 print(f"Consumed data!")
                 handhead = "handhead" + pose_data
                 return_bytes = cam_data + bytes(handhead, 'utf-8')
@@ -142,6 +146,8 @@ class Consumer:
                 # )
         except asyncio.exceptions.CancelledError:
             print("Consumer cancelled")
+        except Exception as err:
+            print(f"Consumer error: Unexpected {err=}, {type(err)=}")
         finally:
             print("Consumer stopped")
 

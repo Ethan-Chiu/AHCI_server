@@ -17,14 +17,11 @@ from utils.yolo_runner_client import YoloRunnerClient
 
 
 
-async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket_uri):
+async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket):
 
     def add_tracks():
         for track in tracks:
             pc.addTrack(track)
-
-    # connect signaling
-    websocket = await websockets.connect(websocket_uri)
 
     # add tracks
     add_tracks()
@@ -86,14 +83,18 @@ async def main():
 
     # Connect to Unity by WebRTC
     try:
+        # connect signaling
+        websocket = await websockets.connect(websocket_uri)
         await run(
             pc=pc,
             tracks=[videoSource.get_source_track()],
-            websocket_uri=websocket_uri,
+            websocket=websocket,
         )
     finally:
         # cleanup
         stop_event.set()
+        websocket.close()
+        print("Websocket connection closed")
         queue.put(None)
         videoSource.stop()
         yoloClient.close()
