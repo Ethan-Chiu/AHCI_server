@@ -17,11 +17,11 @@ class PoseDataSource:
         return self.connected
     
     async def get_data(self):
-        print("Getting data")
         return await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
     
     def end(self):
-        pass 
+        self.websocket.close()
+        print("Pose data source closed")
 
     async def __connect_ws_server(self):
         print("Connecting to ws posedata")
@@ -59,6 +59,7 @@ class CameraDataSource:
         return image_bytes
     
     def end(self):
+        print("Camera data source closed")
         return
 
 
@@ -92,17 +93,26 @@ class Producer:
                 print(f"Produced data!")
         except asyncio.exceptions.CancelledError:
             print("Producer cancelled")
+        except Exception as err:
+            print(f"Unexpected {err=}, {type(err)=}")
         finally:
             self.pose_data_source.end()
             self.cam_data_source.end()
 
+    def close(self):
+        self.pose_data_source.end()
+        self.cam_data_source.end()
+
 
 class Consumer:
-    def __init__(self, latest_data, lock, out_pipe, stop_event):
+    def __init__(self, latest_data, lock, stop_event, out_pipe, fps):
         self.latest_data = latest_data
         self.lock = lock
         self.stop_event = stop_event
+
+        # Args
         self.out_pipe = out_pipe
+        self.fps = fps
 
     async def consume(self):
         try:
@@ -124,7 +134,7 @@ class Consumer:
                 self.out_pipe.send(return_bytes)
                 print("sent to remote server")
 
-                await asyncio.sleep(1)
+                await asyncio.sleep(1/self.fps)
                 # TODO: gather to increase performance
                 # await asyncio.gather(
                 #     asyncio.to_thread(),
@@ -135,16 +145,19 @@ class Consumer:
         finally:
             print("Consumer stopped")
 
+    def close(self):
+        while self.out_pipe.poll():
+            self.out_pipe.recv()
+
 
 class Distributor:
-    def __init__(self, out_pipe):
+    def __init__(self, consumer_args):
         self.latest_data = [b"", b""]  # Use a list to store the latest data (mutable type)
         self.lock = asyncio.Lock()
         self.stop_event = asyncio.Event()
-        self.out_pipe = out_pipe
 
         self.producer = Producer(self.latest_data, self.lock, self.stop_event)
-        self.consumer = Consumer(self.latest_data, self.lock, out_pipe, self.stop_event)
+        self.consumer = Consumer(self.latest_data, self.lock, self.stop_event, **consumer_args)
 
         self.producer_task = None
         self.consumer_task = None
@@ -169,10 +182,13 @@ class Distributor:
         await asyncio.gather(self.producer_task, self.consumer_task)
 
     def stop(self):
-        print("Stopping producer")
+        print("Stopping distributor")
         self.stop_event.set()
+        self.producer.close()
+        self.consumer.close()
+
         if self.producer_task:
             self.producer_task.cancel()
         if self.consumer_task:
             self.consumer_task.cancel()
-        print("Producer stopped")
+        print("Distributor stopped")

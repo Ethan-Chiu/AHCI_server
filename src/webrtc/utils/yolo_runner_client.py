@@ -15,7 +15,6 @@ class YoloRunnerClient:
 
         self.server_address = server_ip
         self.base_port = port
-        self.fps = 15
 
         self.pipe_distributor, self.pipe_receiver = Pipe()
         self.display_pipe_parent, self.display_pipe = Pipe()
@@ -25,7 +24,8 @@ class YoloRunnerClient:
         self.worker = None
         self.stop_event = mp.Event()
 
-        self.distributor = Distributor(self.pipe_distributor)
+        consumer_args = dict(out_pipe=self.pipe_distributor, fps=20)
+        self.distributor = Distributor(consumer_args)
 
 
     def connect(self):
@@ -48,9 +48,6 @@ class YoloRunnerClient:
 
         # Stop distrubutor
         self.stop_event.set()
-        while self.pipe_receiver.poll():
-            print("Drain pipe")
-            self.pipe_receiver.recv()
         self.distributor.stop()
         self.worker.join()
         print("YoloRunnerClient Distrubutor stopped")
@@ -71,30 +68,6 @@ class YoloRunnerClient:
             print("YoloRunnerClient Process stopped")
 
         print("YoloRunnerClient stopped")
-
-
-    # def _distribute(self):
-    #     '''
-    #     Send camera input to YOLO remote server
-    #     '''
-    #     print("Start connecting camera")
-    #     cap = cv2.VideoCapture(0)
-    #     print("Camera connected")
-    #     index = 0
-    #     while not self.stop_event.is_set():
-    #         ret, frame = cap.read()
-    #         if not ret:
-    #             print("No camera input!")
-    #             break
-    #         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
-    #         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
-    #         self.pipe_distributor.send(image_bytes)
-
-    #         if self.display_pipe_parent.poll(1/self.fps):
-    #             if self.display_pipe_parent.recv() is None:
-    #                 break
-
-    #         index += 1
 
 
     def _send_images(self, port, pipe):
