@@ -122,10 +122,11 @@ class YoloRunnerClient:
                         result_bytes = result_bytes[:-14]
                         break
                 print("received 2")
-                image = Image.open(io.BytesIO(result_bytes))
-                result = np.array(image)[:, :, :3]
-                pipe.send(result)
-                print("sent 2")
+                if result_bytes:
+                    image = Image.open(io.BytesIO(result_bytes))
+                    result = np.array(image)[:, :, :3]
+                    pipe.send(result)
+                    print("sent 2")
         except:
             print("Error in sending image")
         finally:
@@ -144,7 +145,7 @@ class YoloRunnerClient:
         while True:
             if self.pipe_distributor.poll():
                 result = pipe.recv()
-                if result == None:
+                if result is None:
                     break
                 if queue:
                     queue.put(result)

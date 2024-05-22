@@ -42,7 +42,7 @@ class CameraDataSource:
     async def start(self):
         try:
             print("Start connecting camera")
-            self.cap = cv2.VideoCapture(0)
+            self.cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
             print("Camera connected")
             return True
         except:
@@ -52,7 +52,7 @@ class CameraDataSource:
     async def get_data(self):
         ret, frame = self.cap.read()
         if not ret:
-            # print("No camera input!")
+            print("No camera input!")
             return None
         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
@@ -85,11 +85,11 @@ class Producer:
                 pose_data = await self.pose_data_source.get_data()
                 cam_data = await self.cam_data_source.get_data()
                 # NOTE: testing
-                cam_data = b"test"
+                # cam_data = b"test"
                 async with self.lock:
                     self.latest_data[0] = pose_data
                     self.latest_data[1] = cam_data
-                # print(f"Produced data!")
+                print(f"Produced data!")
         except asyncio.exceptions.CancelledError:
             print("Producer cancelled")
         finally:
@@ -116,7 +116,7 @@ class Consumer:
                     await asyncio.sleep(1)
                     continue
 
-                # print(f"Consumed data!")
+                print(f"Consumed data!")
                 handhead = "handhead" + pose_data
                 return_bytes = cam_data + bytes(handhead, 'utf-8')
                 
