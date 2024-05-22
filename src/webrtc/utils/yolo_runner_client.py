@@ -6,14 +6,15 @@ import multiprocessing as mp
 from multiprocessing import Process, Pipe
 from PIL import Image
 import threading
+from .data_source import Distributor
 
 
 class YoloRunnerClient:
-    def __init__(self, queue: mp.Queue, server_ip):
+    def __init__(self, queue: mp.Queue, server_ip, port):
         self.queue = queue
 
         self.server_address = server_ip
-        self.base_port = 13761
+        self.base_port = port
         self.fps = 15
 
         self.pipe_distributor, self.pipe_receiver = Pipe()
@@ -24,6 +25,8 @@ class YoloRunnerClient:
         self.worker = None
         self.stop_event = mp.Event()
 
+        self.distributor = Distributor(self.pipe_distributor)
+
 
     def connect(self):
         port = self.base_port
@@ -31,7 +34,7 @@ class YoloRunnerClient:
         self.processes.append(process)
         process.start()
         
-        self.worker = threading.Thread(target=self._distribute)
+        self.worker = threading.Thread(target=self.distributor.start)
         self.worker.start()
 
     
@@ -48,6 +51,7 @@ class YoloRunnerClient:
         while self.pipe_receiver.poll():
             print("Drain pipe")
             self.pipe_receiver.recv()
+        self.distributor.stop()
         self.worker.join()
         print("YoloRunnerClient Distrubutor stopped")
 
@@ -69,32 +73,33 @@ class YoloRunnerClient:
         print("YoloRunnerClient stopped")
 
 
-    def _distribute(self):
-        '''
-        Send camera input to YOLO remote server
-        '''
-        print("Start connecting camera")
-        cap = cv2.VideoCapture(0)
-        print("Camera connected")
-        index = 0
-        while not self.stop_event.is_set():
-            ret, frame = cap.read()
-            if not ret:
-                print("No camera input!")
-                break
-            resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
-            image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
-            self.pipe_distributor.send(image_bytes)
+    # def _distribute(self):
+    #     '''
+    #     Send camera input to YOLO remote server
+    #     '''
+    #     print("Start connecting camera")
+    #     cap = cv2.VideoCapture(0)
+    #     print("Camera connected")
+    #     index = 0
+    #     while not self.stop_event.is_set():
+    #         ret, frame = cap.read()
+    #         if not ret:
+    #             print("No camera input!")
+    #             break
+    #         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
+    #         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
+    #         self.pipe_distributor.send(image_bytes)
 
-            if self.display_pipe_parent.poll(1/self.fps):
-                if self.display_pipe_parent.recv() is None:
-                    break
+    #         if self.display_pipe_parent.poll(1/self.fps):
+    #             if self.display_pipe_parent.recv() is None:
+    #                 break
 
-            index += 1
+    #         index += 1
 
 
     def _send_images(self, port, pipe):
         try:
+            print("Connecting to YOLO remote server")
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((self.server_address, port))
             print("Connected to YOLO remote server")

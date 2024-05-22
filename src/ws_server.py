@@ -38,7 +38,7 @@ class SimpleDataChannelServer:
 
     async def handle_message(self, websocket: WebSocketServerProtocol, message):
         # Handle received message here
-        print(f"Received message: {message}")
+        print(f"Received message: {message[:30]}...")
 
         print("Clients", self.clients)
         for client in self.clients:

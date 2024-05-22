@@ -58,11 +58,10 @@ async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket_u
 
         elif obj is BYE:
             print("Exiting")
-            stop_event.set()
             break
     
 
-if __name__ == "__main__":
+async def main():
     host = socket.gethostbyname(socket.gethostname())
     websocket_uri = f"ws://{host}:8080/video"  # Replace with your WebSocket server URI
 
@@ -81,23 +80,17 @@ if __name__ == "__main__":
     # Send camera to server
     # Put result in queue
     # TODO: send pose data to server
-    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57")
+    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57", port=13751)
     yoloClient.connect()
     yoloClient.display()
 
-
     # Connect to Unity by WebRTC
-    loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(
-            run(
-                pc=pc,
-                tracks=[videoSource.get_source_track()],
-                websocket_uri=websocket_uri,
-            )
+        await run(
+            pc=pc,
+            tracks=[videoSource.get_source_track()],
+            websocket_uri=websocket_uri,
         )
-    except KeyboardInterrupt:
-        print("Ctrl C exit")
     finally:
         # cleanup
         stop_event.set()
@@ -105,5 +98,12 @@ if __name__ == "__main__":
         videoSource.stop()
         yoloClient.close()
         print("Closing peer connection")
-        loop.run_until_complete(pc.close())
+        await pc.close()
         print("Peer connection closed")
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Ctrl C exit")

@@ -15,7 +15,7 @@ class FrameSource:
         while not self.stop_event.is_set():
             array = self.queue.get()
             if type(array) == type(None):
-                print("Get None")
+                print("Frame source stopped")
                 break
             print("Get new frame")
             alpha_channel = np.ones((array.shape[0], array.shape[1], 1), dtype=np.uint8) * 255
