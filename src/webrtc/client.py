@@ -69,15 +69,19 @@ async def main():
 
     # Queue for video
     queue = mp.Queue()
+    cam_queue = mp.Queue()
 
     # Get video from queue
     videoSource = FrameSource(queue)
     videoSource.listen()
 
+    camSource = FrameSource(cam_queue)
+    camSource.listen()
+
     # Send camera to server
     # Put result in queue
     # TODO: send pose data to server
-    yoloClient = YoloRunnerClient(queue, server_ip="140.112.30.57", port=13751)
+    yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="140.112.30.57", port=13751)
     yoloClient.connect()
     yoloClient.display()
 
@@ -87,7 +91,7 @@ async def main():
         websocket = await websockets.connect(websocket_uri)
         await run(
             pc=pc,
-            tracks=[videoSource.get_source_track()],
+            tracks=[camSource.get_source_track(), videoSource.get_source_track()],
             websocket=websocket,
         )
     finally:

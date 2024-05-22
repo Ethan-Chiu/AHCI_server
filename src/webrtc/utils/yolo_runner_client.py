@@ -10,8 +10,9 @@ from .data_source import Distributor
 
 
 class YoloRunnerClient:
-    def __init__(self, queue: mp.Queue, server_ip, port):
+    def __init__(self, queue: mp.Queue, cam_queue:mp.Queue, server_ip, port):
         self.queue = queue
+        self.cam_queue = cam_queue
 
         self.server_address = server_ip
         self.base_port = port
@@ -24,7 +25,11 @@ class YoloRunnerClient:
         self.worker = None
         self.stop_event = mp.Event()
 
-        consumer_args = dict(out_pipe=self.pipe_distributor, fps=20)
+        consumer_args = dict(
+            out_pipe=self.pipe_distributor, 
+            fps=20,
+            cam_queue=self.cam_queue
+        )
         self.distributor = Distributor(consumer_args)
 
 

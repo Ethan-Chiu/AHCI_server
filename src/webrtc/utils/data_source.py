@@ -56,7 +56,7 @@ class CameraDataSource:
             return None
         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
-        return image_bytes
+        return image_bytes, frame
     
     def end(self):
         print("Camera data source closed")
@@ -84,12 +84,13 @@ class Producer:
         try:
             while not self.stop_event.is_set():
                 pose_data = await self.pose_data_source.get_data()
-                cam_data = await self.cam_data_source.get_data()
+                cam_data, frame_data = await self.cam_data_source.get_data()
                 # NOTE: testing
                 # cam_data = b"test"
                 async with self.lock:
                     self.latest_data[0] = pose_data
                     self.latest_data[1] = cam_data
+                    self.latest_data[2] = frame_data
                 print(f"Produced data!")
         except asyncio.exceptions.CancelledError:
             print("Producer cancelled")
@@ -105,13 +106,14 @@ class Producer:
 
 
 class Consumer:
-    def __init__(self, latest_data, lock, stop_event, out_pipe, fps):
+    def __init__(self, latest_data, lock, stop_event, out_pipe, cam_queue, fps):
         self.latest_data = latest_data
         self.lock = lock
         self.stop_event = stop_event
 
         # Args
         self.out_pipe = out_pipe
+        self.cam_queue: mp.Queue = cam_queue
         self.fps = fps
 
     async def consume(self):
@@ -120,6 +122,7 @@ class Consumer:
                 async with self.lock:
                     pose_data = self.latest_data[0]
                     cam_data = self.latest_data[1]
+                    frame_data = self.latest_data[2]
 
                 if(pose_data == b"" or cam_data == b""):
                     print("Data empty")
@@ -134,6 +137,9 @@ class Consumer:
                 handhead = "handhead" + pose_data
                 return_bytes = cam_data + bytes(handhead, 'utf-8')
                 
+                print("send to cam queue")
+                self.cam_queue.put_nowait(frame_data)
+
                 print("sending to remote server...")
                 self.out_pipe.send(return_bytes)
                 print("sent to remote server")
