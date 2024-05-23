@@ -2,3 +2,7 @@ __pycache__
 *.pth
 *.tar
 other
+*.txt
+*.avi
+.*
+*~
