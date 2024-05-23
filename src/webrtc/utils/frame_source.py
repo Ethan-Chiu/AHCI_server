@@ -14,7 +14,7 @@ class FrameSource:
         print("Generator started")
         while not self.stop_event.is_set():
             array = self.queue.get()
-            if type(array) == type(None):
+            if array is None:
                 print("Frame source stopped")
                 break
             print("Get new frame")

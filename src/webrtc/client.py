@@ -22,6 +22,7 @@ async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket):
     def add_tracks():
         for track in tracks:
             pc.addTrack(track)
+            print(track.id)
 
     # add tracks
     add_tracks()
@@ -65,7 +66,7 @@ async def main():
     # peer connection
     pc = RTCPeerConnection()
 
-    stop_event = mp.Event()
+    stop_event = threading.Event()
 
     # Queue for video
     queue = mp.Queue()
@@ -82,8 +83,10 @@ async def main():
     # Put result in queue
     # TODO: send pose data to server
     yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="140.112.30.57", port=13751)
-    yoloClient.connect()
-    yoloClient.display()
+    connect = asyncio.create_task(yoloClient.connect())
+    display = asyncio.create_task(yoloClient.display())
+    await connect
+    await display
 
     # Connect to Unity by WebRTC
     try:
