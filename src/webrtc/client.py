@@ -15,8 +15,6 @@ from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
 from utils.frame_source import FrameSource
 from utils.yolo_runner_client import YoloRunnerClient
 
-
-
 async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket):
 
     def add_tracks():
@@ -36,27 +34,30 @@ async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket):
     }))
     
     # consume signaling
-    while True:
-        message_str = await websocket.recv()
-        print(message_str)
-        message = json.loads(message_str)
-        type = message["Type"]
-        data = message["Message"]
+    try:
+        while True:
+            message_str = await websocket.recv()
+            print(message_str)
+            message = json.loads(message_str)
+            msg_type = message["Type"]
+            data = message["Message"]
 
-        obj = object_from_string(data)
-        print("while")
+            obj = object_from_string(data)
+            print("while")
 
-        if type == "answer" and isinstance(obj, RTCSessionDescription):
-            print("Get answer!")
-            await pc.setRemoteDescription(obj)
+            if msg_type == "answer" and isinstance(obj, RTCSessionDescription):
+                print("Get answer!")
+                await pc.setRemoteDescription(obj)
 
-        elif type == "candidate" and isinstance(obj, RTCIceCandidate):
-            print("Add candidate!")
-            await pc.addIceCandidate(obj)
+            elif msg_type == "candidate" and isinstance(obj, RTCIceCandidate):
+                print("Add candidate!")
+                await pc.addIceCandidate(obj)
 
-        elif obj is BYE:
-            print("Exiting")
-            break
+            elif obj is BYE:
+                print("Exiting")
+                break
+    except asyncio.CancelledError:
+        print("signaling task cancelled")
     
 
 async def main():
@@ -85,23 +86,22 @@ async def main():
     yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="140.112.30.57", port=13751)
     connect = asyncio.create_task(yoloClient.connect())
     display = asyncio.create_task(yoloClient.display())
-    await connect
-    await display
+    await asyncio.gather(connect, display)
 
     # Connect to Unity by WebRTC
     try:
         # connect signaling
-        websocket = await websockets.connect(websocket_uri)
-        await run(
-            pc=pc,
-            tracks=[camSource.get_source_track(), videoSource.get_source_track()],
-            websocket=websocket,
-        )
+        async with websockets.connect(websocket_uri) as websocket:
+            await run(
+                pc=pc,
+                tracks=[camSource.get_source_track(), videoSource.get_source_track()],
+                websocket=websocket,
+            )
+    except asyncio.CancelledError:
+        print("main task cancelled")
     finally:
         # cleanup
         stop_event.set()
-        websocket.close()
-        print("Websocket connection closed")
         queue.put(None)
         videoSource.stop()
         yoloClient.close()
@@ -109,9 +109,18 @@ async def main():
         await pc.close()
         print("Peer connection closed")
 
+def main_wrapper():
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("ctrl c exiting...")
+    finally:
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+        loop.run_until_complete(asyncio.gather(*asyncio.all_tasks(loop), return_exceptions=True))
+        loop.close()
+
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Ctrl C exit")
+    main_wrapper()
