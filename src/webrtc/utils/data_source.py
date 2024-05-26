@@ -60,6 +60,7 @@ class CameraDataSource:
             self.cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            self.cap.set(cv2.CAP_PROP_FPS, 30)
             print("Camera connected")
             return True
         except:
@@ -73,7 +74,6 @@ class CameraDataSource:
             print("No camera input!")
             return None
         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
-        print(resized.shape)
         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
         return image_bytes, frame
     
