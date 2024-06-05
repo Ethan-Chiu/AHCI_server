@@ -22,6 +22,7 @@ async def send_random_data(uri):
 
 host = socket.gethostbyname(socket.gethostname())
 websocket_uri = f"ws://{host}:8080/posedata"
+# websocket_uri = f"ws://{host}:8080/video"
 
 # Start the asyncio event loop and run the client
 asyncio.get_event_loop().run_until_complete(send_random_data(websocket_uri))

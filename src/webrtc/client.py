@@ -7,6 +7,7 @@ import threading
 import websockets
 import multiprocessing as mp
 from typing import List
+import logging
 
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
@@ -57,7 +58,7 @@ async def run(pc: RTCPeerConnection, tracks: List[MediaStreamTrack], websocket):
                 print("Exiting")
                 break
     except asyncio.CancelledError:
-        print("signaling task cancelled")
+        print("Signaling task cancelled")
     
 
 async def main():
@@ -98,7 +99,7 @@ async def main():
                 websocket=websocket,
             )
     except asyncio.CancelledError:
-        print("main task cancelled")
+        print("Main task cancelled")
     finally:
         # cleanup
         stop_event.set()
