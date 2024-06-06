@@ -8,6 +8,7 @@ from PIL import Image
 import threading
 from .data_source import Distributor
 
+from logger.logger_util import get_logger
 
 class YoloRunnerClient:
     def __init__(self, queue: mp.Queue, cam_queue:mp.Queue, server_ip, port):
@@ -17,10 +18,12 @@ class YoloRunnerClient:
         self.server_address = server_ip
         self.base_port = port
 
+        self.logger = get_logger("YoloRunnerClient")
+
         self.pipe_distributor, self.pipe_receiver = Pipe()
         self.display_pipe_parent, self.display_pipe = Pipe()
 
-        self.processes = []
+        self.processes: list[threading.Thread] = []
         self.display_process: threading.Thread | None = None
         self.worker = None
         self.stop_event = threading.Event()
@@ -37,13 +40,21 @@ class YoloRunnerClient:
 
 
     async def connect(self):
+        
+        distributor_started = await self.distributor.start()
+        if not distributor_started:
+            # TODO: clean up all processes
+            return False
+
+        self.worker = threading.Thread(target=self.distributor.run)
+        self.worker.start()
+
         port = self.base_port
-        process = threading.Thread(target=self._send_images, args=(port, self.pipe_receiver, ))
+        process = threading.Thread(target=self.__send_images, args=(port, self.pipe_receiver, ))
         self.processes.append(process)
         process.start()
-        
-        self.worker = threading.Thread(target=self.distributor.start)
-        self.worker.start()
+
+        return True
 
     
     async def display(self):
@@ -52,38 +63,42 @@ class YoloRunnerClient:
 
 
     def close(self):
-        print("Stopping YoloRunnerClient")            
+        self.logger.info("Stopping...")
+
+        self.stop_event.set()
 
         # Stop distrubutor
-        self.stop_event.set()
         self.distributor.stop()
-        self.worker.join()
-        print("YoloRunnerClient Distrubutor stopped")
+        if self.worker and self.worker.is_alive():
+            self.logger.info("Stopping distribute worker...")
+            self.worker.join()
+            self.logger.info("Distribute worker stopped")
+        self.logger.info("Distrubutor stopped")
 
         # Stop displayer 
         if self.display_process and self.display_process.is_alive():
-            print("Display process alive")
+            self.logger.info("Stopping displayer worker...")
             # stop sender
             self.pipe_receiver.send(None)
 
             # stop displayer
             self.display_process.join()
-            print("YoloRunnerClient Displayer stopped")
+            self.logger.info("Displayer worker stopped...")
 
         # Stop all the processses
         for process in self.processes:
             process.join()
-            print("YoloRunnerClient Process stopped")
+            self.logger.info("Processes stopped")
 
-        print("YoloRunnerClient stopped")
+        self.logger.info("Stopped")
 
 
-    def _send_images(self, port, pipe):
+    def __send_images(self, port, pipe):
         try:
-            print("Connecting to YOLO remote server")
+            self.logger.info("Connecting to YOLO remote server")
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((self.server_address, port))
-            print("Connected to YOLO remote server")
+            self.logger.info("Connected to YOLO remote server")
             while True:
                 image_bytes = pipe.recv()
                 print("received")
@@ -133,7 +148,7 @@ class YoloRunnerClient:
                 if result is None:
                     break
                 if queue:
-                    queue.put(result)
+                    queue.put_nowait(result)
                     continue
             # TODO: seperate display function
         #     cv2.imshow(f'Image {index}', result)

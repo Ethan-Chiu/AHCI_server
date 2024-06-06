@@ -7,25 +7,42 @@ import asyncio
 import cv2
 import numpy as np
 import time
+import logging
+
+from logger.logger_util import get_logger
 
 class PoseDataSource:
     def __init__(self):
         self.websocket = None
         self.connected = False
         self.queue = asyncio.Queue()
+        self.logger = get_logger("PoseDataSource")
 
     async def start(self):
-        await self.__connect_ws_server()
-        asyncio.create_task(self._receive_data())
-        return self.connected
+        self.logger.info("Starting...")
+        try: 
+            connected = await self.__connect_ws_server()
+            if not connected:
+                return False
+            
+            asyncio.create_task(self.__receive_data())
+            return self.connected
+        except: 
+            self.logger.error("Failed to start")
     
-    async def _receive_data(self):
+    def end(self):
+        self.logger.info("Ending...")
+        if self.websocket:
+            self.websocket.close()
+        self.logger.info("Pose data source closed")
+
+    async def __receive_data(self):
         try:
             while True:
                 data = await self.websocket.recv()
                 await self.queue.put(data)
         except Exception as e:
-            print(f"WebSocket receive error: {e}")
+            self.logger.error(f"WebSocket receive error: {e}")
     
     async def get_data(self):
         if not self.queue.empty():
@@ -33,73 +50,78 @@ class PoseDataSource:
         else:
             latest_data = b''  # Default value if no data is available
         return latest_data
-    
-    def end(self):
-        self.websocket.close()
-        print("Pose data source closed")
 
     async def __connect_ws_server(self):
-        print("Connecting to ws posedata")
+        self.logger.info("Connecting to ws posedata")
         try:
             host = socket.gethostbyname(socket.gethostname())
             websocket_uri = f"ws://{host}:8080/posedata"
             self.websocket = await websockets.connect(websocket_uri)
             self.connected = True
-            print("Connected to ws posedata")
+            self.logger.info("Connected to ws posedata")
         except:
-            print("Error connecting to ws server posedata")
+            self.logger.error("Error connecting to ws server posedata")
+        return self.connected
 
 
 class CameraDataSource:
     def __init__(self):
         self.cap = None
+        self.logger = get_logger("CameraDataSource")
 
     async def start(self):
+        self.logger.info("Starting...")
         try:
-            print("Start connecting camera")
+            self.logger.info("Start connecting camera")
             self.cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
-            print("Camera connected")
+            self.logger.info("Camera connected")
             return True
         except:
-            print("Failed to connect to camera")
+            self.logger.error("Failed to start camera")
             return False
 
     async def get_data(self):
         ret, frame = self.cap.read()
-        print(frame.shape)
+        self.logger.debug(str(frame.shape))
         if not ret:
-            print("No camera input!")
+            self.logger.error("No camera input!")
             return None
         resized = cv2.resize(frame, (640, int(640*frame.shape[0]/frame.shape[1])))
         image_bytes = cv2.imencode('.jpg', resized)[1].tobytes()
         return image_bytes, frame
     
     def end(self):
-        print("Camera data source closed")
+        self.logger.info("Camera data source closed")
         return
 
 class ProducerConsumer:
-    def __init__(self, latest_data, lock, stop_event, out_pipe, cam_queue, fps):
+    def __init__(self, logger: logging.Logger, latest_data, lock, stop_event, out_pipe, cam_queue, fps):
         self.latest_data = latest_data
         self.lock = lock
         self.stop_event = stop_event
         self.out_pipe = out_pipe
         self.cam_queue = cam_queue
         self.fps = fps
+        self.logger = logger
 
         self.pose_data_source = PoseDataSource()
         self.cam_data_source = CameraDataSource()
 
     async def start(self):
-        print("Starting data sources")
-        pose_data_init, cam_data_init = await asyncio.gather(
-            self.pose_data_source.start(),
-            self.cam_data_source.start()
-        )
-        return pose_data_init and cam_data_init
+        self.logger.info("Starting...")
+        try: 
+            self.logger.info("Starting data sources")
+            pose_data_init, cam_data_init = await asyncio.gather(
+                self.pose_data_source.start(),
+                self.cam_data_source.start()
+            )
+            return pose_data_init and cam_data_init
+        except: 
+            self.logger.error("Failed to start")
+            return False
 
     async def run(self):
         try:
@@ -153,35 +175,43 @@ class Distributor:
         self.latest_data = [b"", b"", np.ones((640, 480, 3)), -1]  # Use a list to store the latest data (mutable type)
         self.lock = asyncio.Lock()
         self.stop_event = asyncio.Event()
+        self.logger = get_logger("Distributor")
 
-        self.producerconsumer = ProducerConsumer(self.latest_data, self.lock, self.stop_event, **producerconsumer_args)
+        self.producerconsumer = ProducerConsumer(self.logger, self.latest_data, self.lock, self.stop_event, **producerconsumer_args)
 
         self.producerconsumer_task = None
 
-    def start(self):
-        print("Distributor starting")
+    async def start(self):
+        self.logger.info("Starting...")
         try:
-            asyncio.run(self.__start())
+            return await self.__start()
         except asyncio.exceptions.CancelledError:
-            print("Distributor cancelled")
+            self.logger.warn("Distributor cancelled")
+        except Exception as e:
+            self.logger.error(f"Failed to start: {e}")
+        return False
+    
+    def run(self):
+        asyncio.run(self.__run())
 
     async def __start(self):
         producerconsumer_init = await self.producerconsumer.start()
         if not producerconsumer_init:
-            print("Failed to init producerconsumer")
-            return
-        print("ProducerConsumer initialized")
+            self.logger.error("Failed to init ProducerConsumer")
+            return False
+        self.logger.info("ProducerConsumer initialized")
+        return True
 
+    async def __run(self):
         # Start long running task
         self.producerconsumer_task = asyncio.create_task(self.producerconsumer.run())
         await self.producerconsumer_task
 
     def stop(self):
-        print("Stopping distributor")
+        self.logger.info("Stopping...")
         self.stop_event.set()
-        self.producer.close()
-        self.consumer.close()
+        self.producerconsumer.close()
 
         if self.producerconsumer_task:
             self.producerconsumer_task.cancel()
-        print("Distributor stopped")
+        self.logger.info("Distributor stopped")

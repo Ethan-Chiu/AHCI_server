@@ -9,6 +9,8 @@ import multiprocessing as mp
 from typing import List
 import logging
 
+from logger.logger_util import get_logger
+
 from aiortc import RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer
 from aiortc.contrib.signaling import BYE, object_from_string, object_to_string
@@ -68,27 +70,37 @@ async def main():
     # peer connection
     pc = RTCPeerConnection()
 
-    stop_event = threading.Event()
-
     # Queue for video
     queue = mp.Queue()
     cam_queue = mp.Queue()
 
     # Get video from queue
-    videoSource = FrameSource(queue)
+    videoSource = FrameSource(queue, name="Video")
     videoSource.listen()
 
-    camSource = FrameSource(cam_queue)
+    camSource = FrameSource(cam_queue, name="Camera")
     camSource.listen()
 
     # Send camera to server
     # Put result in queue
-    # TODO: send pose data to server
     yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="140.112.30.57", port=13751)
     connect = asyncio.create_task(yoloClient.connect())
     display = asyncio.create_task(yoloClient.display())
-    await asyncio.gather(connect, display)
+    connect_init, display_init = await asyncio.gather(connect, display)
 
+    async def cleanup():
+        yoloClient.close()
+        camSource.stop()
+        videoSource.stop()
+        logger.info("Closing peer connection")
+        await pc.close()
+        logger.info("Peer connection closed")
+
+    if not connect_init or not display_init:
+        logger.warning(f"Failed to init. Connection: {connect_init}, Display: {display_init}")
+        await cleanup()
+        return
+    
     # Connect to Unity by WebRTC
     try:
         # connect signaling
@@ -99,23 +111,19 @@ async def main():
                 websocket=websocket,
             )
     except asyncio.CancelledError:
-        print("Main task cancelled")
+        logger.warning("Main task cancelled")
+    except Exception as e:
+        logger.error(f"Error in main task: {e}")
     finally:
-        # cleanup
-        stop_event.set()
-        queue.put(None)
-        videoSource.stop()
-        yoloClient.close()
-        print("Closing peer connection")
-        await pc.close()
-        print("Peer connection closed")
+        await cleanup()
 
-def main_wrapper():
+def main_wrapper(logger: logging.Logger):
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(main())
+        logger.info("Completed")
     except KeyboardInterrupt:
-        print("ctrl c exiting...")
+        logger.warning("Ctrl c exiting...")
     finally:
         for task in asyncio.all_tasks(loop):
             task.cancel()
@@ -124,4 +132,5 @@ def main_wrapper():
 
 
 if __name__ == "__main__":
-    main_wrapper()
+    logger = get_logger("WebRTC Client")
+    main_wrapper(logger)
