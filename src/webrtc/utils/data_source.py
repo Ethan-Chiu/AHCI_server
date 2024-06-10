@@ -72,15 +72,16 @@ class PoseDataSource:
 
 
 class CameraDataSource:
-    def __init__(self):
+    def __init__(self, cam_source: int = 1):
         self.cap = None
+        self.cam_source = cam_source
         self.logger = get_logger("CameraDataSource")
 
     async def start(self):
         self.logger.info("Starting...")
         try:
             self.logger.info("Start connecting camera")
-            self.cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+            self.cap = cv2.VideoCapture(self.cam_source, cv2.CAP_DSHOW)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
             self.cap.set(cv2.CAP_PROP_FPS, 30)

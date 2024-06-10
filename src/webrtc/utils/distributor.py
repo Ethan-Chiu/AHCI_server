@@ -10,16 +10,17 @@ from logger.logger_util import get_logger
 from utils.data_source import PoseDataSource, CameraDataSource
 
 class ProducerConsumer:
-    def __init__(self, logger: logging.Logger, latest_data, stop_event, out_pipe, cam_queue, fps):
+    def __init__(self, logger: logging.Logger, latest_data, stop_event, out_pipe, cam_queue, fps, cam_source):
         self.latest_data = latest_data
         self.stop_event = stop_event
         self.out_pipe = out_pipe
         self.cam_queue = cam_queue
         self.fps = fps
+        self.cam_source = cam_source
         self.logger = get_logger("ProducerConsumer")
 
         self.pose_data_source = PoseDataSource()
-        self.cam_data_source = CameraDataSource()
+        self.cam_data_source = CameraDataSource(cam_source)
 
     async def start(self):
         self.logger.info("Starting...")
@@ -73,12 +74,12 @@ class ProducerConsumer:
             await self.__close()
 
     async def __close(self):
-        self.logger.info("Closing ProducerConsumer...")
+        self.logger.info("Closing...")
         await self.pose_data_source.end()
         self.cam_data_source.end()
         while self.out_pipe.poll():
             self.out_pipe.recv()
-        self.logger.info("ProducerConsumer closed")
+        self.logger.info("Closed")
 
 
 class Distributor:
@@ -128,9 +129,11 @@ class Distributor:
         self.stop_event.set()
 
         if self.producerconsumer_task and not self.producerconsumer_task.done():
+            self.logger.info("Canceling ProducerConsumer...")
             self.producerconsumer_task.cancel()
-            while not self.producerconsumer_task.cancelled():
+            while not self.producerconsumer_task.cancelled() and not self.producerconsumer_task.done():
                 time.sleep(0.1)
             self.producerconsumer_task = None
+            self.logger.info("ProducerConsumer cancelled")
 
-        self.logger.info("Distributor stopped")
+        self.logger.info("Stopped")

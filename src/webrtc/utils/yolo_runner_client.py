@@ -33,7 +33,8 @@ class YoloRunnerClient:
         producerconsumer_args = dict(
             out_pipe=self.pipe_distributor, 
             fps=self.fps,
-            cam_queue=self.cam_queue
+            cam_queue=self.cam_queue,
+            cam_source = 0
         )
 
         self.distributor = Distributor(producerconsumer_args)
@@ -48,7 +49,7 @@ class YoloRunnerClient:
         self.worker = threading.Thread(target=self.distributor.run, args=(distributor_init_done, distributor_error))
         self.worker.start()
 
-        distributor_init = distributor_init_done.wait(20.0)
+        distributor_init = distributor_init_done.wait(10.0)
         if not distributor_init:
             self.logger.error("Distributor init timeout")
             return False
@@ -62,7 +63,7 @@ class YoloRunnerClient:
         process.start()
 
         self.logger.info("Waiting for send image init...")
-        send_image_init = send_image_init_done.wait(20.0)
+        send_image_init = send_image_init_done.wait(10.0)
         if not send_image_init:
             self.logger.error("Send image init timeout")
             return False
@@ -99,10 +100,10 @@ class YoloRunnerClient:
             self.logger.info("Displayer worker stopped...")
 
         # Stop all the threads
-        # TODO: timeout send_images
+        self.logger.info("Stopping send image thread...")        
         for t in self.send_image_threads:
             t.join()
-            self.logger.info("Processes stopped")
+            self.logger.info("Send image stopped")
 
         self.logger.info("Stopped")
 
@@ -153,7 +154,6 @@ class YoloRunnerClient:
         '''
         Receive YOLO result from the server, and put them in the queue
         '''
-        # index = 0
         pipe = self.pipe_distributor
         queue = self.queue
         while True:
@@ -164,10 +164,3 @@ class YoloRunnerClient:
                 if queue:
                     queue.put_nowait(result)
                     continue
-            # TODO: seperate display function
-        #     cv2.imshow(f'Image {index}', result)
-        #     index += 1
-        #     if cv2.waitKey(int(1000/fps*0.9)) & 0xFF == ord('q'):
-        #         out_pipe.send(None)
-        #         break
-        # cv2.destroyAllWindows()
