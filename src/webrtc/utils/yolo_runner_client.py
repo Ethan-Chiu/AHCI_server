@@ -6,7 +6,7 @@ import multiprocessing as mp
 from multiprocessing import Pipe
 from PIL import Image
 import threading
-from .data_source import Distributor
+from .distributor import Distributor
 
 from logger.logger_util import get_logger
 
@@ -23,7 +23,7 @@ class YoloRunnerClient:
         self.pipe_distributor, self.pipe_receiver = Pipe()
         self.display_pipe_parent, self.display_pipe = Pipe()
 
-        self.processes: list[threading.Thread] = []
+        self.send_image_threads: list[threading.Thread] = []
         self.display_process: threading.Thread | None = None
         self.worker = None
         self.stop_event = threading.Event()
@@ -40,19 +40,32 @@ class YoloRunnerClient:
 
 
     async def connect(self):
-        
-        distributor_started = await self.distributor.start()
-        if not distributor_started:
-            # TODO: clean up all processes
-            return False
+        distributor_init_done = threading.Event()
+        distributor_error = threading.Event()
 
-        self.worker = threading.Thread(target=self.distributor.run)
+        send_image_init_done = threading.Event()
+
+        self.worker = threading.Thread(target=self.distributor.run, args=(distributor_init_done, distributor_error))
         self.worker.start()
 
+        distributor_init = distributor_init_done.wait(20.0)
+        if not distributor_init:
+            self.logger.error("Distributor init timeout")
+            return False
+        if distributor_error.is_set():
+            self.logger.error("Distributor error")
+            return False
+
         port = self.base_port
-        process = threading.Thread(target=self.__send_images, args=(port, self.pipe_receiver, ))
-        self.processes.append(process)
+        process = threading.Thread(target=self.__send_images, args=(port, self.pipe_receiver, send_image_init_done))
+        self.send_image_threads.append(process)
         process.start()
+
+        self.logger.info("Waiting for send image init...")
+        send_image_init = send_image_init_done.wait(20.0)
+        if not send_image_init:
+            self.logger.error("Send image init timeout")
+            return False
 
         return True
 
@@ -60,6 +73,7 @@ class YoloRunnerClient:
     async def display(self):
         self.display_process = threading.Thread(target=self._displayer, args=())
         self.display_process.start()
+        return True
 
 
     def close(self):
@@ -73,7 +87,6 @@ class YoloRunnerClient:
             self.logger.info("Stopping distribute worker...")
             self.worker.join()
             self.logger.info("Distribute worker stopped")
-        self.logger.info("Distrubutor stopped")
 
         # Stop displayer 
         if self.display_process and self.display_process.is_alive():
@@ -85,20 +98,22 @@ class YoloRunnerClient:
             self.display_process.join()
             self.logger.info("Displayer worker stopped...")
 
-        # Stop all the processses
-        for process in self.processes:
-            process.join()
+        # Stop all the threads
+        # TODO: timeout send_images
+        for t in self.send_image_threads:
+            t.join()
             self.logger.info("Processes stopped")
 
         self.logger.info("Stopped")
 
 
-    def __send_images(self, port, pipe):
+    def __send_images(self, port, pipe, init_ok: threading.Event):
         try:
             self.logger.info("Connecting to YOLO remote server")
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((self.server_address, port))
             self.logger.info("Connected to YOLO remote server")
+            init_ok.set()
             while True:
                 image_bytes = pipe.recv()
                 print("received")
@@ -127,11 +142,10 @@ class YoloRunnerClient:
                     pipe.send(result)
                     print("sent 2")
         except Exception as err:
-            print("Error in sending image")
-            print(f"Consumer error: Unexpected {err=}, {type(err)=}")
+            self.logger.error(f"Error in sending image: {type(err)=} {err}")
         finally:
             client_socket.close()
-            print("Connection to YOLO remote server closed")
+            self.logger.info("Connection to YOLO remote server closed")
 
 
     
