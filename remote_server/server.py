@@ -48,25 +48,27 @@ def handle_connection(client_socket, process):
     try:
         while True:
             # Receive the image data from the client
-            image_data = b''
+            byte_data = b''
             while True:
                 chunk = client_socket.recv(1024)
                 if not chunk:
                     break
-                image_data += chunk
-                if image_data.endswith(b"IMAGE_COMPLETE"):  # Check if the completion signal is received
+                byte_data += chunk
+                if byte_data.endswith(b"IMAGE_COMPLETE"):  # Check if the completion signal is received
                     break
 
-            if not image_data:
+            if not byte_data:
                 break
 
             # print(time.time())
-            
+
             # Process the received image
-            result = process_image(image_data, process)
+            print("received")
+            result = process_image(byte_data, process)
 
             # Send the result back to the client
             client_socket.sendall(result)
+            print("sent")
 
     finally:
         # Close the connection
