@@ -35,9 +35,11 @@ from utils.segment.general import masks2segments, process_mask
 from utils.torch_utils import select_device, smart_inference_mode
 from utils.augmentations import letterbox
 from PIL import Image
+import time
+import pickle
 
 
-def process_image(image_data):
+def process_image(image_data, is_torch_mode):
     outputfile = open("output.txt", 'a')
     im0 = np.array(Image.open(io.BytesIO(image_data)))
     im = letterbox(im0, imgsz)[0]  # padded resize
@@ -68,6 +70,12 @@ def process_image(image_data):
     hand = torch.tensor(hand).unsqueeze(0).cuda()
     # head = torch.randn(1, 5, 7).cuda()
     head = torch.tensor(head).unsqueeze(0).cuda()
+
+    if is_torch_mode:
+        saves = proto, pred, history[-1]
+        cur_time = int(time.time()*100000)
+        with open(f'saves/{cur_time}.pkl', 'wb') as f:
+            pickle.dump(saves, f)
 
     pooling_layer = nn.AvgPool2d(kernel_size=2).cuda()
     pooled_proto: np.ndarray = pooling_layer(proto_five)
@@ -164,6 +172,7 @@ if __name__ == "__main__":
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
 
     # Read the image data from stdin until the delimiter is encountered
+    is_torch_mode = False
     while True:
         byte_data = b''
         while True:
@@ -173,8 +182,15 @@ if __name__ == "__main__":
             byte_data += chunk
             if byte_data.endswith(b"X") and b'IMAGE_COMPLETE' in byte_data :  # Check for the delimiter
                 byte_data = byte_data.split(b'IMAGE_COMPLETE')[0]
+                if byte_data[-5:] == b'torch':
+                    is_torch_mode = True
+                elif byte_data[-5:] == b'isnot':
+                    is_torch_mode = False
+                else:
+                    print("failed!!!!!")
+                    exit()
+                byte_data = byte_data[:-5]
                 break
-
         byte_data = byte_data.split(b'handhead')
         image_data = byte_data[0]
         handhead = byte_data[1].decode("utf-8").split('\n')
@@ -182,7 +198,7 @@ if __name__ == "__main__":
         head = np.array(reduce(lambda x, y: x+y, [[float(n) for n in handhead[24].split('(')[k].split(')')[0].split(', ')] for k in range(1,3)]), dtype=np.float32)
         history.append((hand, head))
         # Process the image
-        result = process_image(image_data)
+        result = process_image(image_data, is_torch_mode)
 
         if result:
             # Convert the result to bytes and write it to stdout
