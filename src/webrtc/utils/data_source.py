@@ -82,8 +82,8 @@ class CameraDataSource:
         try:
             self.logger.info("Start connecting camera")
             self.cap = cv2.VideoCapture(self.cam_source, cv2.CAP_DSHOW)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920/3)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080/3)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
             self.logger.info("Camera connected")
             return True

@@ -25,8 +25,9 @@ def process_image(image_bytes, process):
     return output
 
 server_address = '140.112.30.57'
+server_address = '0.0.0.0'
 server_sockets, client_sockets, processes, threads = [], [], [], []
-devices = [4,4,5,5,6,7]
+devices = [0]
 for i in range(int(sys.argv[1])):
     # Create a TCP/IP socket for the first server
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

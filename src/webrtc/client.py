@@ -83,7 +83,8 @@ async def main():
 
     # Send camera to server
     # Put result in queue
-    yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="140.112.30.57", port=13751)
+    # "140.112.30.57"
+    yoloClient = YoloRunnerClient(queue, cam_queue, server_ip="127.0.0.1", port=13751)
     connect = asyncio.create_task(yoloClient.connect())
     display = asyncio.create_task(yoloClient.display())
     connect_init, display_init = await asyncio.gather(connect, display)

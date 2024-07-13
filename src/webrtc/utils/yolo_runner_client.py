@@ -49,7 +49,7 @@ class YoloRunnerClient:
         self.worker = threading.Thread(target=self.distributor.run, args=(distributor_init_done, distributor_error))
         self.worker.start()
 
-        distributor_init = distributor_init_done.wait(10.0)
+        distributor_init = distributor_init_done.wait(20.0)
         if not distributor_init:
             self.logger.error("Distributor init timeout")
             return False
