@@ -5,8 +5,17 @@ import os
 import platform
 import sys
 from pathlib import Path
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["WORLD_SIZE"] = "1"
 import torch
 import io
+from functools import reduce
+import logging
+import torch.nn as nn
+from hmipt.utils.config import get_config_from_json
+from hmipt.src.models.hmipt import HmipT
+from torchvision import transforms
+from collections import deque
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]  # YOLO root directory
@@ -27,7 +36,9 @@ from utils.torch_utils import select_device, smart_inference_mode
 from utils.augmentations import letterbox
 from PIL import Image
 
+
 def process_image(image_data):
+    outputfile = open("output.txt", 'a')
     im0 = np.array(Image.open(io.BytesIO(image_data)))
     im = letterbox(im0, imgsz)[0]  # padded resize
     im = im.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
@@ -40,25 +51,68 @@ def process_image(image_data):
 
     pred, proto = model(im, augment=augment, visualize=False)[:2]
     det = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det, nm=32)
-    if len(det[0]):
-        masks = process_mask(proto[-1][0], det[0][:, 6:], det[0][:, :4], im.shape[2:], upsample=True)
-        ormask = np.array(np.logical_or.reduce(masks.cpu(), axis=0)[..., np.newaxis])
-        output = np.transpose(im.cpu()[0]*255, (1, 2, 0)).numpy()[:,:,::-1] * ormask
-        normask = (1-ormask) * np.array([0,255,0])
-        output = output + normask
-        output = np.concatenate((output, ormask), axis=-1).astype(np.uint8)
-    else:
+
+    yolo_history.append(proto[-1][0])
+
+    if len(history) < 5:
+        outputfile.write(f"starting...{len(history)}\n")
+        return None
+    
+    handhead = list(history)
+    hand = [a[0] for a in handhead]
+    head = [a[1] for a in handhead]
+
+    # proto = torch.randn(5, 32, 60, 48).cuda()
+    proto_five = torch.stack(list(yolo_history)).cuda()
+    # hand = torch.randn(1, 5, 24, 14).cuda()
+    hand = torch.tensor(hand).unsqueeze(0).cuda()
+    # head = torch.randn(1, 5, 7).cuda()
+    head = torch.tensor(head).unsqueeze(0).cuda()
+
+    pooling_layer = nn.AvgPool2d(kernel_size=2).cuda()
+    pooled_proto: np.ndarray = pooling_layer(proto_five)
+    pooled_proto = pooled_proto.unsqueeze(dim=0)
+    prediction = model2(pooled_proto, hand, head)
+    prediction = prediction.squeeze().detach()
+
+    left_distance = torch.dist(hand[0,3,0,0:3], hand[0,4,0,0:3])
+    right_distance = torch.dist(hand[0,3,0,7:10], hand[0,4,0,7:10])
+
+    threshold = 0
+    if left_distance < threshold and right_distance < threshold:
         output = np.full_like(np.transpose(im.cpu()[0]*255, (1, 2, 0)), (0, 255, 0), dtype=np.uint8)
-
-    image_bytes = cv2.imencode('.jpg', output)[1].tobytes()
-    return image_bytes
-
+    elif len(det[0]):
+        obj_labels = torch.tensor([39, 41, 64, 66, 67]).to(model.device)
+        obj_mask = torch.isin(det[0][:, 5], obj_labels)
+        hand_labels = torch.tensor([0,]).to(model.device)
+        hand_mask = torch.isin(det[0][:, 5], hand_labels)
+        filtered = det[0][obj_mask]
+        handed = det[0][hand_mask]
+        blank = torch.zeros(1, 38).to(model.device)
+        filtered = torch.cat((filtered, blank), dim=0)
+        product = torch.matmul(filtered[:, 6:], prediction)
+        closest_index = torch.argmax(product)
+        with_hand = torch.cat((filtered[closest_index:closest_index+1], handed), dim=0)
+        with_hand[0, 6:] = prediction
+        masks = process_mask(proto[-1][0], with_hand[:, 6:], with_hand[:, :4], im.shape[2:], upsample=True)
+        # masks = process_mask(proto[-1][0], det[0][:, 6:], det[0][:, :4], im.shape[2:], upsample=True)
+        # masks = process_mask(proto[-1][0], prediction.unsqueeze(0), det[0][:, :4], im.shape[2:], upsample=True)
+        ormask = np.array(np.logical_or.reduce(masks.cpu(), axis=0)[..., np.newaxis])
+        outputfile.write(str(ormask.shape))
+        ormask = ormask * 255.0
+        np_array = ormask.astype(np.uint8)
+        outputfile.write(str(np_array.shape))
+        np_array = np.squeeze(np_array, axis=2)
+        output = Image.fromarray(np_array, mode='L')
+        output = np.array(output)
+        image_bytes = cv2.imencode('.jpg', output)[1].tobytes()
+        return image_bytes
 
 if __name__ == "__main__":
     weights='models/gelan-c-seg.pt'
     source='yolov9/data/images/horses.jpg'
     data=ROOT / 'data/coco.yaml'
-    imgsz=(640,640)
+    imgsz=(480,480)
     conf_thres=0.25
     iou_thres=0.45
     max_det=1000
@@ -92,6 +146,18 @@ if __name__ == "__main__":
     stride, names, pt = model.stride, model.names, model.pt
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
+    config_path = "./hmipt.json"
+    checkpoint_path = "./models/checkpoint_5.pth.tar"
+    config, _ = get_config_from_json(config_path)
+    logger = logging.getLogger()
+    model2 = HmipT(config=config, logger=logger) 
+    checkpoint = torch.load(checkpoint_path)
+    model2.load_state_dict(checkpoint['state_dict'])
+    model2 = model2.cuda()
+
+    history = deque(maxlen=5)
+    yolo_history = deque(maxlen=5)
+
     # Dataloader
     dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
     bs = 1
@@ -99,21 +165,30 @@ if __name__ == "__main__":
 
     # Read the image data from stdin until the delimiter is encountered
     while True:
-        image_data = b''
+        byte_data = b''
         while True:
             chunk = sys.stdin.buffer.read(1024)
             if not chunk:
                 break
-            image_data += chunk
-            if image_data.endswith(b"X") and b'IMAGE_COMPLETE' in image_data :  # Check for the delimiter
-                image_data = image_data.split(b'IMAGE_COMPLETE')[0]
+            byte_data += chunk
+            if byte_data.endswith(b"X") and b'IMAGE_COMPLETE' in byte_data :  # Check for the delimiter
+                byte_data = byte_data.split(b'IMAGE_COMPLETE')[0]
                 break
 
+        byte_data = byte_data.split(b'handhead')
+        image_data = byte_data[0]
+        handhead = byte_data[1].decode("utf-8").split('\n')
+        hand = np.array([reduce(lambda x, y: x+y, [[float(n) for n in handhead[m].split('(')[k].split(')')[0].split(', ')] for k in range(1,5)]) for m in range(24)], dtype=np.float32)
+        head = np.array(reduce(lambda x, y: x+y, [[float(n) for n in handhead[24].split('(')[k].split(')')[0].split(', ')] for k in range(1,3)]), dtype=np.float32)
+        history.append((hand, head))
         # Process the image
         result = process_image(image_data)
 
-        # Convert the result to bytes and write it to stdout
-        result_bytes = result + b'ARRAY_COMPLETE'
+        if result:
+            # Convert the result to bytes and write it to stdout
+            result_bytes = result + b'ARRAY_COMPLETE'
+        else:
+            result_bytes = b'ARRAY_COMPLETE'
         result_bytes += b'X' * (1024 - (len(result_bytes) % 1024))
         sys.stdout.buffer.write(result_bytes)
         sys.stdout.flush()
