@@ -6,3 +6,5 @@ other
 *.avi
 .*
 *~
+remote_server/yolov9
+remote_server/models

@@ -72,7 +72,7 @@ class YoloRunnerClient:
 
     
     async def display(self):
-        self.display_process = threading.Thread(target=self._displayer, args=())
+        self.display_process = threading.Thread(target=self.__displayer, args=())
         self.display_process.start()
         return True
 
@@ -100,6 +100,7 @@ class YoloRunnerClient:
             self.logger.info("Displayer worker stopped...")
 
         # Stop all the threads
+        self.pipe_distributor.send(None)
         self.logger.info("Stopping send image thread...")        
         for t in self.send_image_threads:
             t.join()
@@ -116,8 +117,9 @@ class YoloRunnerClient:
             self.logger.info("Connected to YOLO remote server")
             init_ok.set()
             while True:
+                self.logger.debug("Waiting pipe")
                 image_bytes = pipe.recv()
-                print("received")
+                self.logger.debug("Received")
                 if image_bytes is None:
                     break
                 client_socket.sendall(image_bytes)
@@ -150,7 +152,7 @@ class YoloRunnerClient:
 
 
     
-    def _displayer(self):
+    def __displayer(self):
         '''
         Receive YOLO result from the server, and put them in the queue
         '''

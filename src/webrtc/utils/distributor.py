@@ -39,14 +39,13 @@ class ProducerConsumer:
         self.logger.info("Running...")
         try:
             start_time = time.time()
-            print("check 0")
             while not self.stop_event.is_set():
                 # Produce data
-                print("check 1")
+                self.logger.debug("Producing data")
                 pose_data = await self.pose_data_source.get_data()
-                print("check 2")
+                self.logger.debug("Pose data")
                 cam_data, frame_data = self.cam_data_source.get_data()
-                print("check 3")
+                self.logger.debug("Cam data")
 
                 if not pose_data or not cam_data:
                     await asyncio.sleep(1)
@@ -54,17 +53,16 @@ class ProducerConsumer:
 
                 handhead = "handhead" + pose_data
                 return_bytes = cam_data + bytes(handhead, 'utf-8')
-                print("check 6")
 
+                self.logger.debug("Data prepared")
                 self.cam_queue.put_nowait(frame_data)
                 self.out_pipe.send(return_bytes)
-                print("check 7")
+                self.logger.debug("Send pipe")
 
                 sleep_time = max(0, 1/self.fps - (time.time() - start_time))
                 time.sleep(sleep_time)
-                print("check 8")
+                self.logger.debug("Waited")
                 start_time = time.time()
-                print("check 9")
 
         except asyncio.exceptions.CancelledError:
             self.logger.warning("Run cancelled")
