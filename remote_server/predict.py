@@ -182,21 +182,21 @@ if __name__ == "__main__":
             byte_data += chunk
             if byte_data.endswith(b"X") and b'IMAGE_COMPLETE' in byte_data :  # Check for the delimiter
                 byte_data = byte_data.split(b'IMAGE_COMPLETE')[0]
-                if byte_data[-5:] == b'torch':
-                    is_torch_mode = True
-                elif byte_data[-5:] == b'isnot':
-                    is_torch_mode = False
-                else:
-                    print("failed!!!!!")
-                    exit()
-                byte_data = byte_data[:-5]
                 break
         byte_data = byte_data.split(b'handhead')
         image_data = byte_data[0]
-        handhead = byte_data[1].decode("utf-8").split('\n')
+        byte_data = byte_data[1].split(b'torch')
+        handhead = byte_data[0].decode("utf-8").split('\n')
         hand = np.array([reduce(lambda x, y: x+y, [[float(n) for n in handhead[m].split('(')[k].split(')')[0].split(', ')] for k in range(1,5)]) for m in range(24)], dtype=np.float32)
         head = np.array(reduce(lambda x, y: x+y, [[float(n) for n in handhead[24].split('(')[k].split(')')[0].split(', ')] for k in range(1,3)]), dtype=np.float32)
         history.append((hand, head))
+        torch_xy = byte_data[1].decode("utf-8").split(',')
+        torch_x = float(torch_xy[0])
+        torch_y = float(torch_xy[1])
+        if torch_x != -1 or torch_y != -1:
+            is_torch_mode = True
+        else:
+            is_torch_mode = False
         # Process the image
         result = process_image(image_data, is_torch_mode)
 

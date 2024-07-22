@@ -123,11 +123,6 @@ class YoloRunnerClient:
                 if image_bytes is None:
                     break
                 client_socket.sendall(image_bytes)
-                is_torch_mode = True
-                if is_torch_mode:
-                    client_socket.send(b'torch')
-                else:
-                    client_socket.send(b'isnot')
                 client_socket.send(b"IMAGE_COMPLETE")
                 print("sent")
 

@@ -7,7 +7,7 @@ import threading
 
 from logger.logger_util import get_logger
 
-from utils.data_source import PoseDataSource, CameraDataSource
+from utils.data_source import PoseDataSource, TorchDataSource, CameraDataSource
 
 class ProducerConsumer:
     def __init__(self, logger: logging.Logger, latest_data, stop_event, out_pipe, cam_queue, fps, cam_source):
@@ -20,6 +20,7 @@ class ProducerConsumer:
         self.logger = get_logger("ProducerConsumer")
 
         self.pose_data_source = PoseDataSource()
+        self.torch_data_source = TorchDataSource()
         self.cam_data_source = CameraDataSource(cam_source)
 
     async def start(self):
@@ -28,6 +29,7 @@ class ProducerConsumer:
             self.logger.info("Starting data sources")
             pose_data_init, cam_data_init = await asyncio.gather(
                 self.pose_data_source.start(),
+                self.torch_data_source.start(),
                 self.cam_data_source.start()
             )
             return pose_data_init and cam_data_init
@@ -44,6 +46,29 @@ class ProducerConsumer:
                 self.logger.debug("Producing data")
                 pose_data = await self.pose_data_source.get_data()
                 self.logger.debug("Pose data")
+                torch_data = await self.torch_data_source.get_data()
+                self.logger.debug("Torch data")
+                cam_data, frame_data = self.cam_data_source.get_data()
+                self.logger.debug("Cam data")
+
+                if not pose_data or not torch_data or not cam_data:
+                    await asyncio.sleep(1)
+                    continue
+
+                handhead = "handhead" + pose_data
+                torch = "torch" + torch_data
+                return_bytes = cam_data + bytes(handhead, 'utf-8') + bytes(torch, 'utf-8')
+
+                self.logger.debug("Data prepared")
+                self.cam_queue.put_nowait(frame_data)
+                self.out_pipe.send(return_bytes)
+                self.logger.debug("Send pipe")
+
+                sleep_time = max(0, 1/self.fps - (time.time() - start_time))
+                time.sleep(sleep_time)
+                self.logger.debug("Waited")
+                start_time = time.time()
+
                 cam_data, frame_data = self.cam_data_source.get_data()
                 self.logger.debug("Cam data")
 
