@@ -51,13 +51,6 @@ async def handle_pose_data(websocket: WebSocketServerProtocol, clients, logger: 
             if client != websocket:
                 logger.debug(f"Recieve data and send to {client}")
                 await client.send(data)
-
-async def handle_torch(websocket: WebSocketServerProtocol, clients, logger: logging.Logger):
-    async for data in websocket:
-        for client in clients:
-            if client != websocket:
-                logger.debug(f"Recieve torch_xy and send to {client}")
-                await client.send(data)
             
 
 async def main():
@@ -71,15 +64,12 @@ async def main():
 
     video_handler = Handler("/video", handle_message)
     pose_handler = Handler("/posedata", handle_pose_data)
-    torch_handler = Handler("/torchdata", handle_torch_data)
     
     video_handler.set_log_level(logging.DEBUG)
     pose_handler.set_log_level(logging.DEBUG)
-    torch_handler.set_log_level(logging.DEBUG)
 
     server.add_handler(video_handler)
     server.add_handler(pose_handler)
-    server.add_handler(torch_handler)
     
     await server.start()
 

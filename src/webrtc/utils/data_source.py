@@ -1,13 +1,7 @@
 import socket
-import multiprocessing as mp
-import time
-import random
 import websockets
 import asyncio
 import cv2
-import numpy as np
-import time
-import logging
 
 from logger.logger_util import get_logger
 
@@ -43,6 +37,7 @@ class PoseDataSource:
         try: 
             if not self.queue.empty():
                 latest_data = self.queue.get_nowait()
+                latest_data = bytes(latest_data, 'utf-8')
             else:
                 latest_data = b''  # Default value if no data is available
             return latest_data
@@ -69,65 +64,7 @@ class PoseDataSource:
         except:
             self.logger.error("Error connecting to ws server posedata")
         return self.connected
-
-class TorchDataSource:
-    def __init__(self):
-        self.websocket = None
-        self.connected = False
-        self.queue = asyncio.Queue()
-        self.task = None
-        self.logger = get_logger("TorchDataSource")
-
-    async def start(self):
-        self.logger.info("Starting...")
-        try: 
-            connected = await self.__connect_ws_server()
-            if not connected:
-                return False
-            
-            self.task = asyncio.create_task(self.__receive_data())
-            return self.connected
-        except: 
-            self.logger.error("Failed to start")
     
-    async def end(self):
-        self.logger.info("Ending...")
-        if self.task:
-            self.task.cancel()
-        if self.websocket:
-            await self.websocket.close()
-        self.logger.info("Torch data source closed")
-
-    async def get_data(self):
-        try: 
-            if not self.queue.empty():
-                latest_data = self.queue.get_nowait()
-            else:
-                latest_data = b''  # Default value if no data is available
-            return latest_data
-        except Exception as e: 
-            self.logger.error(f"Failed to get data: {e}")
-            raise Exception("Get torch data error")
-
-    async def __receive_data(self):
-        try:
-            while True:
-                data = await self.websocket.recv()
-                await self.queue.put(data)
-        except Exception as e:
-            self.logger.error(f"WebSocket receive error: {e}")
-
-    async def __connect_ws_server(self):
-        self.logger.info("Connecting to ws torchdata")
-        try:
-            host = socket.gethostbyname(socket.gethostname())
-            websocket_uri = f"ws://{host}:8080/torchdata"
-            self.websocket = await websockets.connect(websocket_uri)
-            self.connected = True
-            self.logger.info("Connected to ws torchdata")
-        except:
-            self.logger.error("Error connecting to ws server torchdata")
-        return self.connected
 
 class CameraDataSource:
     def __init__(self, cam_source: int = 1):
