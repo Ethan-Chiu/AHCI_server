@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-sys.path.append('./yolov9')
+sys.path.append('../../yolov9')
 
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
@@ -76,6 +76,10 @@ def process_image(image_data, is_torch_mode):
         cur_time = int(time.time()*100000)
         with open(f'saves/{cur_time}.pkl', 'wb') as f:
             pickle.dump(saves, f)
+        outputfile.write(f"1")
+    else:
+        outputfile.write(f"0")
+
 
     pooling_layer = nn.AvgPool2d(kernel_size=2).cuda()
     pooled_proto: np.ndarray = pooling_layer(proto_five)
@@ -106,10 +110,8 @@ def process_image(image_data, is_torch_mode):
         # masks = process_mask(proto[-1][0], det[0][:, 6:], det[0][:, :4], im.shape[2:], upsample=True)
         # masks = process_mask(proto[-1][0], prediction.unsqueeze(0), det[0][:, :4], im.shape[2:], upsample=True)
         ormask = np.array(np.logical_or.reduce(masks.cpu(), axis=0)[..., np.newaxis])
-        outputfile.write(str(ormask.shape))
         ormask = ormask * 255.0
         np_array = ormask.astype(np.uint8)
-        outputfile.write(str(np_array.shape))
         np_array = np.squeeze(np_array, axis=2)
         output = Image.fromarray(np_array, mode='L')
         output = np.array(output)
@@ -166,13 +168,9 @@ if __name__ == "__main__":
     history = deque(maxlen=5)
     yolo_history = deque(maxlen=5)
 
-    # Dataloader
-    dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt, vid_stride=vid_stride)
-    bs = 1
-    model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
-
     # Read the image data from stdin until the delimiter is encountered
     is_torch_mode = False
+    outputfile2 = open("output2.txt", 'a')
     while True:
         byte_data = b''
         while True:
@@ -190,6 +188,7 @@ if __name__ == "__main__":
         hand = np.array([reduce(lambda x, y: x+y, [[float(n) for n in handhead[m].split('(')[k].split(')')[0].split(', ')] for k in range(1,5)]) for m in range(24)], dtype=np.float32)
         head = np.array(reduce(lambda x, y: x+y, [[float(n) for n in handhead[24].split('(')[k].split(')')[0].split(', ')] for k in range(1,3)]), dtype=np.float32)
         history.append((hand, head))
+        outputfile2.write(str(len(byte_data)))
         if len(byte_data) > 1:
             torch_xy = byte_data[1].decode("utf-8").split(',')
             torch_x = float(torch_xy[0])

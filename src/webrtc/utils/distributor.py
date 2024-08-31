@@ -51,15 +51,10 @@ class ProducerConsumer:
                     await asyncio.sleep(1)
                     continue
 
-                parsed_pose_data = pose_data.split(b'torch')
-                handhead = b"handhead" + parsed_pose_data[0]
-
-                if len(parsed_pose_data) != 1:
-                    self.logger.info("torch activated")
-                    handhead += b"torch"
-                    handhead += parsed_pose_data[1]
-                
-                return_bytes = cam_data + handhead
+                if b'torch' in pose_data:
+                    #self.logger.info("torch activated")
+                    print(pose_data.split(b'time')[0])
+                return_bytes = cam_data + b'handhead' + pose_data
 
                 self.logger.debug("Data prepared")
                 self.cam_queue.put_nowait(frame_data)

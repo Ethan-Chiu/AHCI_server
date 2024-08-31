@@ -119,12 +119,12 @@ class YoloRunnerClient:
             while True:
                 self.logger.debug("Waiting pipe")
                 image_bytes = pipe.recv()
-                self.logger.debug("Received")
+                #self.logger.debug("Received")
                 if image_bytes is None:
                     break
                 client_socket.sendall(image_bytes)
                 client_socket.send(b"IMAGE_COMPLETE")
-                print("sent")
+                #print("sent")
 
                 result_bytes = b''
                 while True:
@@ -135,7 +135,7 @@ class YoloRunnerClient:
                     if result_bytes.endswith(b"ARRAY_COMPLETE"):
                         result_bytes = result_bytes[:-14]
                         break
-                print("received 2")
+                #print("received 2")
                 if result_bytes:
                     image = Image.open(io.BytesIO(result_bytes))
                     result = np.array(image)
@@ -143,7 +143,7 @@ class YoloRunnerClient:
                     if len(img_shape) == 2:
                         result = np.repeat(result[:, :, np.newaxis], 3, axis=2)
                     pipe.send(result)
-                    print("sent 2")
+                    #print("sent 2")
         except Exception as err:
             self.logger.error(f"Error in sending image: {type(err)=} {err}")
         finally:

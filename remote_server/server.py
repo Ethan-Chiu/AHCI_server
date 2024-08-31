@@ -25,7 +25,7 @@ def process_image(image_bytes, process):
     return output
 
 server_address = '140.112.30.57'
-server_address = '0.0.0.0'
+server_address = '127.0.0.1'
 server_sockets, client_sockets, processes, threads = [], [], [], []
 devices = [0]
 for i in range(int(sys.argv[1])):

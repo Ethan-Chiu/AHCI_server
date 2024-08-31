@@ -76,7 +76,7 @@ class CameraDataSource:
         self.logger.info("Starting...")
         try:
             self.logger.info("Start connecting camera")
-            self.cap = cv2.VideoCapture(self.cam_source, cv2.CAP_DSHOW)
+            self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920/3)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080/3)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
@@ -89,7 +89,7 @@ class CameraDataSource:
     def get_data(self):
         try:
             ret, frame = self.cap.read()
-            self.logger.debug(str(frame.shape))
+            # self.logger.debug(str(frame.shape))
             if not ret:
                 self.logger.error("No camera input!")
                 return None
